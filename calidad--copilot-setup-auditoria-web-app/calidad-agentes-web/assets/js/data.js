@@ -1,6 +1,33 @@
 // Data Management Module
 // Handles all data operations including authentication, teams, agents, audits, and metrics
 
+// Safe storage fallback so the app still works if localStorage is blocked (e.g. some Vercel previews)
+const SafeStorage = (() => {
+  const memoryStore = {};
+  const memoryStorage = {
+    getItem: (key) => (key in memoryStore ? memoryStore[key] : null),
+    setItem: (key, value) => {
+      memoryStore[key] = value;
+    },
+    removeItem: (key) => {
+      delete memoryStore[key];
+    }
+  };
+
+  try {
+    const testKey = '__storage_test__';
+    window.localStorage.setItem(testKey, 'ok');
+    window.localStorage.removeItem(testKey);
+    return window.localStorage;
+  } catch (err) {
+    console.warn('localStorage no disponible, usando almacenamiento en memoria', err);
+    return memoryStorage;
+  }
+})();
+
+// Expose for other scripts (app.js)
+window.SafeStorage = SafeStorage;
+
 const DataManager = {
   // Storage keys
   STORAGE_KEYS: {
@@ -16,7 +43,7 @@ const DataManager = {
 
   // Remove all persisted app data so every load starts clean
   resetStorage() {
-    Object.values(this.STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+    Object.values(this.STORAGE_KEYS).forEach(key => SafeStorage.removeItem(key));
   },
 
   // Team definitions
@@ -75,11 +102,11 @@ const DataManager = {
 
   // Initialize data (non-destructive; only seeds missing stores)
   init() {
-    if (!localStorage.getItem(this.STORAGE_KEYS.AUDITS)) {
-      localStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify([]));
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.AUDITS)) {
+      SafeStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify([]));
     }
 
-    if (!localStorage.getItem(this.STORAGE_KEYS.TEAMS)) {
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.TEAMS)) {
       const teamsData = {};
       this.TEAMS.forEach(team => {
         teamsData[team.id] = {
@@ -87,25 +114,25 @@ const DataManager = {
           members: this.DEFAULT_AGENTS[team.id] || []
         };
       });
-      localStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teamsData));
+      SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teamsData));
     }
 
-    if (!localStorage.getItem(this.STORAGE_KEYS.METRICS)) {
-      localStorage.setItem(this.STORAGE_KEYS.METRICS, JSON.stringify({}));
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.METRICS)) {
+      SafeStorage.setItem(this.STORAGE_KEYS.METRICS, JSON.stringify({}));
     }
 
-    if (!localStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS)) {
-      localStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify({}));
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS)) {
+      SafeStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify({}));
     }
 
-    if (!localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG)) {
-      localStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify({}));
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG)) {
+      SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify({}));
     }
   },
 
   // Teams management
   getAllTeams() {
-    const teamsStr = localStorage.getItem(this.STORAGE_KEYS.TEAMS);
+    const teamsStr = SafeStorage.getItem(this.STORAGE_KEYS.TEAMS);
     return teamsStr ? JSON.parse(teamsStr) : {};
   },
 
@@ -133,7 +160,7 @@ const DataManager = {
         team: teamId,
         addedAt: new Date().toISOString()
       });
-      localStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+      SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
       return true;
     }
     return false;
@@ -143,7 +170,7 @@ const DataManager = {
     const teams = this.getAllTeams();
     if (teams[teamId]) {
       teams[teamId].members = teams[teamId].members.filter(m => m.email !== memberEmail);
-      localStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+      SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
       return true;
     }
     return false;
@@ -156,7 +183,7 @@ const DataManager = {
     // Check if it's a test account
     if (this.TEST_ACCOUNTS[normalizedEmail]) {
       const user = this.TEST_ACCOUNTS[normalizedEmail];
-      localStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
+      SafeStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
       return user;
     }
     
@@ -166,23 +193,23 @@ const DataManager = {
       const member = teams[teamId].members.find(m => m.email === normalizedEmail);
       if (member) {
         const user = { email: normalizedEmail, role: 'viewer', team: teamId };
-        localStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
+        SafeStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
         return user;
       }
     }
     
     // Default to viewer role for any other email
     const user = { email: normalizedEmail, role: 'viewer' };
-    localStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
+    SafeStorage.setItem(this.STORAGE_KEYS.USER, JSON.stringify(user));
     return user;
   },
 
   logout() {
-    localStorage.removeItem(this.STORAGE_KEYS.USER);
+    SafeStorage.removeItem(this.STORAGE_KEYS.USER);
   },
 
   getCurrentUser() {
-    const userStr = localStorage.getItem(this.STORAGE_KEYS.USER);
+    const userStr = SafeStorage.getItem(this.STORAGE_KEYS.USER);
     return userStr ? JSON.parse(userStr) : null;
   },
 
@@ -198,7 +225,7 @@ const DataManager = {
 
   // Audit CRUD operations with new structure
   getAllAudits() {
-    const auditsStr = localStorage.getItem(this.STORAGE_KEYS.AUDITS);
+    const auditsStr = SafeStorage.getItem(this.STORAGE_KEYS.AUDITS);
     return auditsStr ? JSON.parse(auditsStr) : [];
   },
 
@@ -216,7 +243,7 @@ const DataManager = {
       updatedAt: new Date().toISOString()
     };
     audits.push(newAudit);
-    localStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(audits));
+    SafeStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(audits));
     return newAudit;
   },
 
@@ -229,7 +256,7 @@ const DataManager = {
         ...auditData,
         updatedAt: new Date().toISOString()
       };
-      localStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(audits));
+      SafeStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(audits));
       return audits[index];
     }
     return null;
@@ -238,7 +265,7 @@ const DataManager = {
   deleteAudit(id) {
     const audits = this.getAllAudits();
     const filtered = audits.filter(audit => audit.id !== id);
-    localStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(filtered));
+    SafeStorage.setItem(this.STORAGE_KEYS.AUDITS, JSON.stringify(filtered));
     return true;
   },
 
@@ -664,35 +691,35 @@ const DataManager = {
   // Weekly Metrics Management (Manual Input)
   getWeeklyMetricsData(year, month) {
     const key = `${year}-${month}`;
-    const allData = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
+    const allData = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
     return allData[key] || {};
   },
 
   saveWeeklyMetricsData(year, month, data) {
     const key = `${year}-${month}`;
-    const allData = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
+    const allData = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
     allData[key] = data;
-    localStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify(allData));
+    SafeStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify(allData));
   },
 
   getWeekConfig(year, month) {
     const key = `${year}-${month}`;
-    const allConfigs = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
+    const allConfigs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
     return allConfigs[key] || [];
   },
 
   ensureWeekConfig(year, month) {
     const key = `${year}-${month}`;
-    const allConfigs = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
+    const allConfigs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
     if (!allConfigs[key] || !allConfigs[key].length) {
       allConfigs[key] = this.getWeeksOfMonth(year, month);
-      localStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
+      SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
     }
     return allConfigs[key];
   },
 
   getConfiguredMonths(year) {
-    const allConfigs = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
+    const allConfigs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
     return Object.keys(allConfigs)
       .map(key => key.split('-'))
       .filter(parts => parseInt(parts[0]) === year)
@@ -703,7 +730,7 @@ const DataManager = {
   // Save a single week's metrics for one agent
   saveWeeklyMetric(agentName, meta, metrics) {
     const key = `${meta.year}-${meta.month}`;
-    const allData = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
+    const allData = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEKLY_METRICS) || '{}');
     if (!allData[key]) {
       allData[key] = {};
     }
@@ -711,19 +738,19 @@ const DataManager = {
       allData[key][agentName] = {};
     }
     allData[key][agentName][meta.week] = metrics;
-    localStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify(allData));
+    SafeStorage.setItem(this.STORAGE_KEYS.WEEKLY_METRICS, JSON.stringify(allData));
   },
 
   saveWeekConfig(year, month, weeks) {
     const key = `${year}-${month}`;
-    const allConfigs = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
+    const allConfigs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
     allConfigs[key] = weeks;
-    localStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
+    SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
   },
 
   // Audit Views Tracking
   markAuditAsViewed(auditId, viewerEmail) {
-    const views = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
+    const views = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
     const now = new Date().toISOString();
     if (!views[auditId]) {
       views[auditId] = [];
@@ -734,18 +761,18 @@ const DataManager = {
     if (!already) {
       normalized.push({ email: viewerEmail, timestamp: now });
       views[auditId] = normalized;
-      localStorage.setItem(this.STORAGE_KEYS.AUDIT_VIEWS, JSON.stringify(views));
+      SafeStorage.setItem(this.STORAGE_KEYS.AUDIT_VIEWS, JSON.stringify(views));
     }
   },
 
   hasViewedAudit(auditId, viewerEmail) {
-    const views = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
+    const views = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
     if (!views[auditId]) return false;
     return views[auditId].some(v => (typeof v === 'string' ? v === viewerEmail : v.email === viewerEmail));
   },
 
   getAuditViewEvents() {
-    const views = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
+    const views = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_VIEWS) || '{}');
     const events = [];
     Object.entries(views).forEach(([auditId, entries]) => {
       if (!Array.isArray(entries)) return;
@@ -759,22 +786,22 @@ const DataManager = {
 
   // Audit Comments (Agent feedback on their audits)
   saveAuditComment(auditId, agentEmail, comment) {
-    const comments = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
+    const comments = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
     comments[auditId] = {
       agentEmail,
       comment,
       timestamp: new Date().toISOString()
     };
-    localStorage.setItem(this.STORAGE_KEYS.AUDIT_COMMENTS, JSON.stringify(comments));
+    SafeStorage.setItem(this.STORAGE_KEYS.AUDIT_COMMENTS, JSON.stringify(comments));
   },
 
   getAuditComment(auditId) {
-    const comments = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
+    const comments = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
     return comments[auditId] || null;
   },
 
   getAllAuditComments() {
-    return JSON.parse(localStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
+    return JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
   },
 
   // Add or update team member with shift information
@@ -789,7 +816,7 @@ const DataManager = {
         addedAt: new Date().toISOString()
       };
       teams[teamId].members.push(member);
-      localStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+      SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
       return true;
     }
     return false;
@@ -809,7 +836,7 @@ const DataManager = {
     };
 
     teams[teamId].members[memberIndex] = updatedMember;
-    localStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+    SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
     return true;
   },
 
@@ -861,7 +888,7 @@ const DataManager = {
   // Delete a specific week from configuration
   deleteWeekFromConfig(year, month, weekIndex) {
     const key = `${year}-${month}`;
-    const allConfigs = JSON.parse(localStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
+    const allConfigs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG) || '{}');
     const weeks = allConfigs[key];
 
     if (!weeks || !Array.isArray(weeks)) {
@@ -881,7 +908,7 @@ const DataManager = {
 
     weeks.splice(weekIndex, 1);
     allConfigs[key] = weeks;
-    localStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
+    SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(allConfigs));
     return true;
   }
 };

@@ -605,8 +605,8 @@ const App = {
 
   handleClearSession() {
     if (confirm('¿Está seguro que desea limpiar todos los datos y la sesión? Esta acción no se puede deshacer.')) {
-      // Clear all localStorage
-      localStorage.clear();
+      // Clear all persisted app data
+      DataManager.resetStorage();
       // Reinitialize data
       DataManager.init();
       // Show auth screen
@@ -622,7 +622,7 @@ const App = {
 
   handleClearData() {
     if (confirm('Esto borrará temporalmente todos los datos y reiniciará la app. ¿Continuar?')) {
-      localStorage.clear();
+      DataManager.resetStorage();
       DataManager.init();
       this.populateMonthSelectors();
       this.showAuthScreen();
@@ -2114,7 +2114,7 @@ const App = {
     if (!comments[auditId]) return;
     if (confirm('¿Eliminar el comentario de este agente?')) {
       delete comments[auditId];
-      localStorage.setItem(DataManager.STORAGE_KEYS.AUDIT_COMMENTS, JSON.stringify(comments));
+      SafeStorage.setItem(DataManager.STORAGE_KEYS.AUDIT_COMMENTS, JSON.stringify(comments));
       this.viewAudit(auditId);
       this.loadRecentActivity();
     }
