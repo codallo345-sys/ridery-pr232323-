@@ -1314,7 +1314,10 @@ const App = {
       const teamRankings = {};
       
       teamsToShow.forEach(([teamId, team]) => {
-        const teamMemberNames = team.members ? team.members.map(m => m.name) : [];
+        // Filter out supervisors and analistas - they are not auditable
+        const teamMemberNames = team.members 
+          ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+          : [];
         const teamAudits = currentMonthAudits.filter(audit => teamMemberNames.includes(audit.agentName));
         
         // Calculate agent scores with satisfaction
@@ -2198,16 +2201,18 @@ const App = {
       cb.checked = false;
     });
     
-    // Populate agent dropdown
+    // Populate agent dropdown (exclude supervisors and analistas - they are not auditable)
     const agentSelect = document.getElementById('agentSelect');
     agentSelect.innerHTML = '<option value="">Seleccionar agente...</option>';
     
     const teams = DataManager.getAllTeams();
     Object.values(teams).forEach(team => {
-        if (team.members.length > 0) {
+        // Filter out supervisors and analistas from the list
+        const auditableMembers = team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista');
+        if (auditableMembers.length > 0) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = team.name;
-        team.members.forEach(member => {
+        auditableMembers.forEach(member => {
           const option = document.createElement('option');
             option.value = JSON.stringify({ name: member.name, teamId: team.id, email: member.email });
           option.textContent = member.name;
@@ -2906,28 +2911,41 @@ const App = {
       teamToShow = selectedTeamFilter; // For editors, use selected filter
     }
     
-    // Add all team members based on filter
+    // Add all team members based on filter (exclude supervisors and analistas - they are not auditable)
     if (teamToShow) {
       // Show only specific team
       const team = teams[teamToShow];
       if (team && team.members) {
-        team.members.forEach(member => allAgents.add(member.name));
+        team.members.forEach(member => {
+          // Exclude supervisors and analistas from metrics
+          if (member.role !== 'supervisor' && member.role !== 'analista') {
+            allAgents.add(member.name);
+          }
+        });
       }
     } else if (isEditor && !selectedTeamFilter) {
       // Editor with no filter - show all teams
       Object.values(teams).forEach(team => {
         if (team.members) {
-          team.members.forEach(member => allAgents.add(member.name));
+          team.members.forEach(member => {
+            // Exclude supervisors and analistas from metrics
+            if (member.role !== 'supervisor' && member.role !== 'analista') {
+              allAgents.add(member.name);
+            }
+          });
         }
       });
     }
     
     let agentsList = Array.from(allAgents).sort();
     
-    // Filter agents by team
+    // Filter agents by team and exclude supervisors/analistas
     if (teamToShow) {
       const team = teams[teamToShow];
-      const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+      // Get only non-supervisor/non-analista members
+      const teamMemberNames = team && team.members 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+        : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }
     
@@ -3332,27 +3350,40 @@ const App = {
       teamToShow = selectedTeamFilter; // For editors, use selected filter
     }
     
-    // Add team members based on filter
+    // Add team members based on filter (exclude supervisors and analistas - they are not auditable)
     if (teamToShow) {
       const team = teams[teamToShow];
       if (team && team.members) {
-        team.members.forEach(member => allAgents.add(member.name));
+        team.members.forEach(member => {
+          // Exclude supervisors and analistas from metrics
+          if (member.role !== 'supervisor' && member.role !== 'analista') {
+            allAgents.add(member.name);
+          }
+        });
       }
     } else if (isEditor && !selectedTeamFilter) {
       // Editor with no filter - show all teams
       Object.values(teams).forEach(team => {
         if (team.members) {
-          team.members.forEach(member => allAgents.add(member.name));
+          team.members.forEach(member => {
+            // Exclude supervisors and analistas from metrics
+            if (member.role !== 'supervisor' && member.role !== 'analista') {
+              allAgents.add(member.name);
+            }
+          });
         }
       });
     }
     
     let agentsList = Array.from(allAgents).sort();
     
-    // Filter by team
+    // Filter by team and exclude supervisors/analistas
     if (teamToShow) {
       const team = teams[teamToShow];
-      const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+      // Get only non-supervisor/non-analista members
+      const teamMemberNames = team && team.members 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+        : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }
     
