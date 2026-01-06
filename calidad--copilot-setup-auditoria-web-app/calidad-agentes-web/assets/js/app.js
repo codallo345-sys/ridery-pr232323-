@@ -1968,19 +1968,38 @@ const App = {
     document.getElementById('memberModalMode').value = 'add';
     document.getElementById('memberOriginalEmail').value = '';
     
-    // Pre-select supervisor role
+    // Pre-select supervisor role and hide role selector (fixed to supervisor)
     const roleSelect = document.getElementById('memberRole');
     if (roleSelect) {
       roleSelect.value = 'supervisor';
     }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for supervisors
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for supervisors (supervisors don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
     
     const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
     if (submitBtn) {
       submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Supervisor';
     }
-    
-    // Uncheck all radio buttons
-    document.querySelectorAll('input[name="memberShift"]').forEach(radio => radio.checked = false);
     
     document.getElementById('addMemberModal').classList.remove('hidden');
   },
@@ -2003,10 +2022,20 @@ const App = {
     document.getElementById('memberModalMode').value = 'add';
     document.getElementById('memberOriginalEmail').value = '';
     
-    // Reset role to user
+    // Reset role to user and show role selector
     const roleSelect = document.getElementById('memberRole');
     if (roleSelect) {
       roleSelect.value = 'viewer';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'block';
+    }
+    
+    // Show sub-team section for regular members
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'block';
     }
     
     // Clear sub-team
@@ -2015,13 +2044,22 @@ const App = {
       subTeamInput.value = '';
     }
     
+    // Show shift section for regular members
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'block';
+    }
+    
+    // Restore required attribute for shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = true;
+      radio.checked = false;
+    });
+    
     const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
     if (submitBtn) {
       submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Integrante';
     }
-    
-    // Uncheck all radio buttons
-    document.querySelectorAll('input[name="memberShift"]').forEach(radio => radio.checked = false);
     
     document.getElementById('addMemberModal').classList.remove('hidden');
   },
@@ -2083,6 +2121,7 @@ const App = {
     const shift = document.querySelector('input[name="memberShift"]:checked')?.value;
     const mode = document.getElementById('memberModalMode').value || 'add';
     const originalEmail = document.getElementById('memberOriginalEmail').value;
+    const memberType = document.getElementById('memberType')?.value || 'member';
     const role = document.getElementById('memberRole')?.value || 'viewer';
     const subTeam = document.getElementById('memberSubTeam')?.value?.trim() || null;
     
@@ -2090,34 +2129,42 @@ const App = {
     const currentUser = DataManager.getCurrentUser();
     const addedBy = currentUser?.email;
     
-    if (!shift) {
+    // Supervisors don't require shift selection
+    const isSupervisorType = memberType === 'supervisor' || role === 'supervisor';
+    
+    if (!isSupervisorType && !shift) {
       alert('Por favor seleccione un turno');
       return;
     }
     
+    // Build member data object
+    const memberData = {
+      name: name,
+      email: email,
+      role: isSupervisorType ? 'supervisor' : role
+    };
+    
+    // Only add shift and subTeam for non-supervisors
+    if (!isSupervisorType) {
+      memberData.shift = shift;
+      memberData.subTeam = subTeam;
+    }
+    
     let success = false;
     if (mode === 'edit') {
-      success = DataManager.updateTeamMember(teamId, originalEmail, {
-        name: name,
-        email: email,
-        shift: shift,
-        role: role,
-        subTeam: subTeam
-      });
+      success = DataManager.updateTeamMember(teamId, originalEmail, memberData);
     } else {
-      success = DataManager.addTeamMember(teamId, {
-        name: name,
-        email: email,
-        shift: shift,
-        role: role,
-        subTeam: subTeam
-      }, addedBy);
+      success = DataManager.addTeamMember(teamId, memberData, addedBy);
     }
     
     if (success) {
       this.closeAddMemberModal();
       this.loadTeamsView();
-      alert(mode === 'edit' ? 'Integrante actualizado correctamente' : `Integrante agregado exitosamente al turno ${shift}`);
+      if (isSupervisorType) {
+        alert(mode === 'edit' ? 'Supervisor actualizado correctamente' : 'Supervisor agregado exitosamente');
+      } else {
+        alert(mode === 'edit' ? 'Integrante actualizado correctamente' : `Integrante agregado exitosamente al turno ${shift}`);
+      }
     } else {
       alert('Error al guardar integrante');
     }
