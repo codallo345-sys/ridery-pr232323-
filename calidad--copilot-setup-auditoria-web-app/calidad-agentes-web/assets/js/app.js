@@ -289,15 +289,30 @@ const App = {
   populateMonthSelectors() {
     const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
     const configuredMonths = DataManager.getConfiguredMonths(currentYear);
-    // Siempre permitir 12 meses para métricas semanales; para otros selects se mantiene compatibilidad
+    const isEditor = DataManager.isEditor();
+    
+    // For editors: show all 12 months
+    // For users: show only current month + 2 months ahead (max 2 months advance)
     const monthsFullYear = Array.from({ length: 12 }, (_, i) => i);
+    const maxMonthForUsers = Math.min(currentMonth + 2, 11); // Current + 2 months, max December
+    const monthsForUsers = Array.from({ length: maxMonthForUsers + 1 }, (_, i) => i);
 
     const renderSelect = (select) => {
       if (!select) return;
       const previousValue = select.value;
-      // Para filterMonthMetrics usar siempre los 12 meses
-      const baseMonths = select.id === 'filterMonthMetrics' ? monthsFullYear : (configuredMonths.length ? Array.from({ length: Math.max(...configuredMonths) + 1 }, (_, i) => i) : monthsFullYear);
+      
+      // Determine which months to show based on role
+      let baseMonths;
+      if (isEditor) {
+        // Editors can see all months
+        baseMonths = monthsFullYear;
+      } else {
+        // Users can only see up to current month + 2
+        baseMonths = monthsForUsers;
+      }
+      
       if (previousValue && !baseMonths.includes(parseInt(previousValue))) {
         const prevMonth = parseInt(previousValue);
         if (!isNaN(prevMonth)) {
@@ -321,6 +336,7 @@ const App = {
     };
 
     renderSelect(document.getElementById('filterMonthMetrics'));
+    renderSelect(document.getElementById('filterMonthlyMetrics'));
   },
 
   // Setup all event listeners
@@ -645,14 +661,14 @@ const App = {
     const viewerOnlyEls = document.querySelectorAll('.only-viewer');
     const userTeam = DataManager.getUserTeam();
     
-    if (user.role === 'editor') {
-      roleBadge.textContent = 'Editor';
-      roleBadge.className = 'badge badge-editor';
-      // Show editor-only elements
+    if (user.role === 'admin') {
+      roleBadge.textContent = 'Administrador';
+      roleBadge.className = 'badge badge-admin';
+      roleBadge.style.background = '#eab308';
+      // Show all elements for admin
       document.querySelectorAll('.only-editor').forEach(el => {
         el.style.display = 'block';
       });
-      // Hide viewer-only elements for editors
       viewerOnlyEls.forEach(el => {
         el.style.display = 'none';
       });
@@ -660,11 +676,86 @@ const App = {
       if (filterTeamWeekly) {
         filterTeamWeekly.disabled = false;
       }
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
+        el.style.display = 'flex';
+      });
+    } else if (user.role === 'editor' || user.role === 'calidad') {
+      roleBadge.textContent = 'Calidad';
+      roleBadge.className = 'badge badge-calidad';
+      roleBadge.style.background = '#38CEA6';
+      // Show editor-only elements
+      document.querySelectorAll('.only-editor').forEach(el => {
+        el.style.display = 'block';
+      });
+      // Hide viewer-only elements for calidad
+      viewerOnlyEls.forEach(el => {
+        el.style.display = 'none';
+      });
+      const filterTeamWeekly = document.getElementById('filterTeamWeekly');
+      if (filterTeamWeekly) {
+        filterTeamWeekly.disabled = false;
+      }
+      // Show teams navigation for calidad
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
+        el.style.display = 'flex';
+      });
+    } else if (user.role === 'supervisor') {
+      roleBadge.textContent = 'Supervisor';
+      roleBadge.className = 'badge badge-supervisor';
+      roleBadge.style.background = '#8b5cf6';
+      // Supervisors can manage their own team
+      document.querySelectorAll('.only-editor').forEach(el => {
+        el.style.display = 'none';
+      });
+      // Show supervisor-specific elements
+      document.querySelectorAll('.only-supervisor').forEach(el => {
+        el.style.display = 'block';
+      });
+      viewerOnlyEls.forEach(el => {
+        el.style.display = 'none';
+      });
+      // Show teams navigation for supervisor (only their team)
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
+        el.style.display = 'flex';
+      });
+      const filterTeamWeekly = document.getElementById('filterTeamWeekly');
+      if (filterTeamWeekly) {
+        if (userTeam) filterTeamWeekly.value = userTeam;
+        filterTeamWeekly.disabled = true;
+      }
+      this.populateMonthSelectors();
+    } else if (user.role === 'analista') {
+      roleBadge.textContent = 'Analista';
+      roleBadge.className = 'badge badge-analista';
+      roleBadge.style.background = '#06b6d4';
+      // Analistas have same permissions as supervisors
+      document.querySelectorAll('.only-editor').forEach(el => {
+        el.style.display = 'none';
+      });
+      document.querySelectorAll('.only-supervisor').forEach(el => {
+        el.style.display = 'block';
+      });
+      viewerOnlyEls.forEach(el => {
+        el.style.display = 'none';
+      });
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
+        el.style.display = 'flex';
+      });
+      const filterTeamWeekly = document.getElementById('filterTeamWeekly');
+      if (filterTeamWeekly) {
+        if (userTeam) filterTeamWeekly.value = userTeam;
+        filterTeamWeekly.disabled = true;
+      }
+      this.populateMonthSelectors();
     } else {
-      roleBadge.textContent = 'Lector';
+      roleBadge.textContent = 'Usuario';
       roleBadge.className = 'badge badge-viewer';
       // Hide editor-only elements
       document.querySelectorAll('.only-editor').forEach(el => {
+        el.style.display = 'none';
+      });
+      // Hide teams navigation for regular users
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
         el.style.display = 'none';
       });
       // Show viewer-only elements for lectores
@@ -879,6 +970,7 @@ const App = {
     const user = DataManager.getCurrentUser();
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     const allAudits = DataManager.getAllAudits();
     const teams = DataManager.getAllTeams();
 
@@ -892,8 +984,52 @@ const App = {
 
     const container = document.getElementById('recentActivity');
 
+    // Supervisors/Analistas: show team audits activity
+    if (hasSupervisorPerms && !isEditor) {
+      const teamAudits = userTeam ? allAudits.filter(a => a.teamId === userTeam) : [];
+      const teamName = teams[userTeam]?.name || 'su equipo';
+      
+      const events = teamAudits
+        .map(audit => ({
+          type: 'team_audit',
+          ts: new Date(audit.createdAt || audit.date),
+          audit
+        }))
+        .filter(e => e.ts && !isNaN(e.ts))
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 6);
+
+      if (!events.length) {
+        container.innerHTML = '<p class="empty">No hay actividad reciente en su equipo</p>';
+        return;
+      }
+
+      container.innerHTML = events.map(evt => {
+        const audit = evt.audit;
+        const scoreColor = audit.score >= 80 ? '#38CEA6' : audit.score >= 60 ? '#f59e0b' : '#ef4444';
+        return `
+          <div style="background: linear-gradient(135deg, #f0f9ff, #fff); border: 1px solid #bae6fd; border-radius: 0.9rem; padding: 1rem; display: grid; gap: 0.5rem; margin-bottom: 0.4rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; color: #0284c7; font-weight: 700;">
+              <i class="fas fa-clipboard-check"></i>
+              <span>Se realizó una auditoría al usuario (${audit.agentName})</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="font-size: 0.95rem; color: var(--text-primary);">
+                Puntuación: <strong style="color: ${scoreColor};">${audit.score}%</strong>
+              </div>
+              <button class="btn-mini" style="background: #0284c7; color: white; border: none;" onclick="App.viewAudit('${audit.id}')">
+                <i class="fas fa-eye"></i> Ver auditoría
+              </button>
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">${DataManager.formatDate(audit.date)}</div>
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
     if (!isEditor) {
-      // Actividad propia: auditorías y comentarios del agente
+      // Regular users: Actividad propia: auditorías y comentarios del agente
       let personalAudits = [];
       if (userTeam) {
         const team = teams[userTeam];
@@ -974,7 +1110,7 @@ const App = {
       return;
     }
 
-    // Editor: mezcla auditorías y comentarios
+    // Editor: mezcla auditorías, comentarios, and activity logs
     const auditEvents = allAudits.map(audit => ({
       type: 'audit',
       ts: new Date(audit.createdAt || audit.date),
@@ -990,10 +1126,19 @@ const App = {
       comment: data.comment
     }));
 
-    const events = [...auditEvents, ...commentEvents]
+    // Get activity log entries (supervisor added/removed members)
+    const activityLog = DataManager.getActivityLog();
+    const activityEvents = activityLog.map(log => ({
+      type: 'activity',
+      ts: new Date(log.timestamp),
+      activityType: log.type,
+      data: log.data
+    }));
+
+    const events = [...auditEvents, ...commentEvents, ...activityEvents]
       .filter(e => e.ts && !isNaN(e.ts))
       .sort((a, b) => b.ts - a.ts)
-      .slice(0, 8);
+      .slice(0, 10);
 
     if (!events.length) {
       container.innerHTML = '<p class="empty">No hay actividad reciente</p>';
@@ -1001,6 +1146,44 @@ const App = {
     }
 
     container.innerHTML = events.map(evt => {
+      if (evt.type === 'activity') {
+        const teamName = teams[evt.data.teamId]?.name || 'Equipo';
+        if (evt.activityType === 'member_added') {
+          return `
+            <div style="padding: 0.75rem; border-radius: 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; margin-bottom: 0.35rem;">
+              <div style="display: flex; justify-content: space-between; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; color: #16a34a; font-weight: 700;">
+                  <i class="fas fa-user-plus"></i>
+                  <span>Nuevo integrante agregado</span>
+                </div>
+                <span style="color: var(--text-muted); font-size: 0.8rem;">${evt.ts.toLocaleString()}</span>
+              </div>
+              <div style="margin-top: 0.4rem; color: var(--text-primary);">
+                <strong>${evt.data.memberName}</strong> fue agregado a ${teamName}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">Por: ${emailToName(evt.data.addedBy)}</div>
+            </div>
+          `;
+        } else if (evt.activityType === 'member_removed') {
+          return `
+            <div style="padding: 0.75rem; border-radius: 0.75rem; background: #fef2f2; border: 1px solid #fecaca; margin-bottom: 0.35rem;">
+              <div style="display: flex; justify-content: space-between; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; color: #dc2626; font-weight: 700;">
+                  <i class="fas fa-user-minus"></i>
+                  <span>Integrante eliminado</span>
+                </div>
+                <span style="color: var(--text-muted); font-size: 0.8rem;">${evt.ts.toLocaleString()}</span>
+              </div>
+              <div style="margin-top: 0.4rem; color: var(--text-primary);">
+                <strong>${evt.data.memberName}</strong> fue eliminado de ${teamName}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">Por: ${emailToName(evt.data.removedBy)}</div>
+            </div>
+          `;
+        }
+        return '';
+      }
+
       if (evt.type === 'comment') {
         const audit = allAudits.find(a => a.id === evt.auditId);
         const agentName = audit?.agentName || emailToName(evt.agentEmail);
@@ -1044,6 +1227,9 @@ const App = {
     const user = DataManager.getCurrentUser();
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
+    const isSupervisor = DataManager.isSupervisor();
+    const isAnalista = DataManager.isAnalista();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     const allAudits = DataManager.getAllAudits();
     const teams = DataManager.getAllTeams();
     
@@ -1069,16 +1255,23 @@ const App = {
     }
     
     // Build filter options depending on role
+    // Supervisors and Analistas can see all teams for comparison
     let filterOptions = '';
-    if (isEditor) {
+    let canSelectTeams = false;
+    
+    if (isEditor || hasSupervisorPerms) {
+      // Editor, Supervisor, Analista can see all teams
       filterOptions = `
         <option value="all">Todos los Equipos</option>
         ${Object.entries(teams).map(([teamId, team]) => `
           <option value="${teamId}">${team.name}</option>
         `).join('')}
       `;
+      canSelectTeams = true;
     } else if (userTeam && teams[userTeam]) {
+      // Regular users only see their team (no dropdown)
       filterOptions = `<option value="${userTeam}">${teams[userTeam].name}</option>`;
+      canSelectTeams = false;
     }
 
     // Add or refresh team filter dropdown
@@ -1091,16 +1284,16 @@ const App = {
       filterContainer.innerHTML = `
         <div style="display: flex; gap: 0.5rem; align-items: center;">
           <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">
-            <i class="fas fa-filter"></i> ${isEditor ? 'Filtrar por Equipo:' : 'Equipo:'}
+            <i class="fas fa-filter"></i> ${canSelectTeams ? 'Filtrar por Equipo:' : 'Equipo:'}
           </label>
-          <select id="topAgentsTeamFilter" class="input-dark" style="flex: 1; max-width: 300px;" ${!isEditor ? 'disabled' : ''}>
+          <select id="topAgentsTeamFilter" class="input-dark" style="flex: 1; max-width: 300px;" ${!canSelectTeams ? 'disabled' : ''}>
             ${filterOptions}
           </select>
         </div>
       `;
       container.parentElement.insertBefore(filterContainer, container);
 
-      if (isEditor) {
+      if (canSelectTeams) {
         document.getElementById('topAgentsTeamFilter').addEventListener('change', () => {
           this.loadTopAgents();
         });
@@ -1108,16 +1301,22 @@ const App = {
     } else if (filterContainer) {
       const selectEl = filterContainer.querySelector('#topAgentsTeamFilter');
       if (selectEl) {
+        // Preserve current selection before updating options
+        const currentSelection = selectEl.value;
         selectEl.innerHTML = filterOptions;
-        selectEl.disabled = !isEditor;
+        selectEl.disabled = !canSelectTeams;
+        // Restore selection if it still exists in options
+        if (currentSelection && Array.from(selectEl.options).some(opt => opt.value === currentSelection)) {
+          selectEl.value = currentSelection;
+        }
       }
     }
     
     // Get selected team filter
     const selectedTeamFilter = document.getElementById('topAgentsTeamFilter')?.value || 'all';
     
-    // RBAC: Force Lector to their team filter
-    const effectiveTeamFilter = !isEditor && userTeam ? userTeam : selectedTeamFilter;
+    // RBAC: Force regular users to their team filter, supervisors/analistas can select
+    const effectiveTeamFilter = (!isEditor && !hasSupervisorPerms && userTeam) ? userTeam : selectedTeamFilter;
     
     // Helper function to calculate satisfaction percentage for an agent
     const calculateSatisfaction = (agentName) => {
@@ -1134,7 +1333,10 @@ const App = {
       const teamRankings = {};
       
       teamsToShow.forEach(([teamId, team]) => {
-        const teamMemberNames = team.members ? team.members.map(m => m.name) : [];
+        // Filter out supervisors and analistas - they are not auditable
+        const teamMemberNames = team.members 
+          ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
+          : [];
         const teamAudits = currentMonthAudits.filter(audit => teamMemberNames.includes(audit.agentName));
         
         // Calculate agent scores with satisfaction
@@ -1207,7 +1409,7 @@ const App = {
                 `).join('')}
               </div>
             ` : ''}
-            ${isEditor && data.needsImprovement.length > 0 ? `
+            ${(isEditor || hasSupervisorPerms) && data.needsImprovement.length > 0 ? `
               <div>
                 <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">📊 PUEDE MEJORAR (&lt;83% calidad o &lt;90% satisfacción)</div>
                 ${data.needsImprovement.map((agent) => `
@@ -1246,10 +1448,12 @@ const App = {
     const teams = DataManager.getAllTeams();
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     
     // Clear and add options respecting role
     selector.innerHTML = '';
-    if (isEditor) {
+    if (isEditor || hasSupervisorPerms) {
+      // Editors and supervisors/analistas can see all teams
       selector.innerHTML = '<option value="">Acumulado Global</option>';
       Object.entries(teams).forEach(([teamId, team]) => {
         const option = document.createElement('option');
@@ -1259,7 +1463,7 @@ const App = {
       });
       selector.disabled = false;
     } else {
-      // Lectores: solo su equipo
+      // Regular users: solo su equipo
       if (userTeam && teams[userTeam]) {
         const option = document.createElement('option');
         option.value = userTeam;
@@ -1282,9 +1486,10 @@ const App = {
 
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
-    // En lecturas, forzar al equipo asignado
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
+    // En usuarios regulares, forzar al equipo asignado
     let selectedTeam = selector.value;
-    if (!isEditor && userTeam) {
+    if (!isEditor && !hasSupervisorPerms && userTeam) {
       selectedTeam = userTeam;
       selector.value = userTeam;
     }
@@ -1418,6 +1623,7 @@ const App = {
     const user = DataManager.getCurrentUser();
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     
     if (!userTeam || isEditor) {
       // Only for team users, not editors
@@ -1428,30 +1634,91 @@ const App = {
     const team = teams[userTeam];
     const allAudits = DataManager.getAllAudits();
     
-    // Find which agent this user represents
-    let userAgentName = null;
-    if (team && team.members) {
-      const member = team.members.find(m => m.email === user.email);
-      if (member) {
-        userAgentName = member.name;
-      }
-    }
-    
-    if (!userAgentName) return;
-    
-    // Calculate personal quality
-    const personalAudits = allAudits.filter(audit => audit.agentName === userAgentName);
-    const personalQuality = personalAudits.length > 0 
-      ? Math.round(personalAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / personalAudits.length)
-      : 0;
-    
-    // Calculate team average quality
-    const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+    // Calculate team average quality (exclude supervisors/analistas from member names)
+    const teamMemberNames = team && team.members 
+      ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
+      : [];
     const teamAudits = allAudits.filter(audit => teamMemberNames.includes(audit.agentName));
     
     const teamQuality = teamAudits.length > 0 
       ? Math.round(teamAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / teamAudits.length)
       : 0;
+    
+    // For supervisors/analistas: calculate other teams average
+    // For regular users: calculate personal quality
+    let primaryValue = 0;
+    let primaryLabel = '';
+    let secondaryLabel = '';
+    let chartLabels = [];
+    let chartData = [];
+    let chartColors = [];
+    
+    if (hasSupervisorPerms) {
+      // Supervisor/Analista: Show "Promedio de mi equipo" vs "Promedio de otros equipos"
+      primaryValue = teamQuality;
+      primaryLabel = 'Promedio de mi equipo';
+      secondaryLabel = 'Promedio de otros equipos';
+      
+      // Calculate average of other teams
+      let otherTeamsTotal = 0;
+      let otherTeamsCount = 0;
+      Object.entries(teams).forEach(([teamId, t]) => {
+        if (teamId !== userTeam && t.members) {
+          const otherMemberNames = t.members
+            .filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad')
+            .map(m => m.name);
+          const otherAudits = allAudits.filter(a => otherMemberNames.includes(a.agentName));
+          if (otherAudits.length > 0) {
+            otherTeamsTotal += otherAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0);
+            otherTeamsCount += otherAudits.length;
+          }
+        }
+      });
+      
+      const otherTeamsAvg = otherTeamsCount > 0 ? Math.round(otherTeamsTotal / otherTeamsCount) : 0;
+      
+      chartLabels = ['Mi Equipo', 'Otros Equipos', 'Meta (100%)'];
+      chartData = [teamQuality, otherTeamsAvg, Math.max(0, 100 - Math.max(teamQuality, otherTeamsAvg))];
+      chartColors = ['#38CEA6', '#f59e0b', '#e5e7eb'];
+      
+      // Build comparison text for supervisors
+      var comparisonText = `
+        Promedio de mi equipo: <strong style="color: #38CEA6; font-size: 1.2rem;">${teamQuality}%</strong><br>
+        Promedio de otros equipos: <strong style="color: #f59e0b; font-size: 1.2rem;">${otherTeamsAvg}%</strong>
+      `;
+    } else {
+      // Regular user: Show personal quality vs team average
+      // Find which agent this user represents
+      let userAgentName = null;
+      if (team && team.members) {
+        const member = team.members.find(m => m.email === user.email);
+        if (member) {
+          userAgentName = member.name;
+        }
+      }
+      
+      if (!userAgentName) return;
+      
+      // Calculate personal quality
+      const personalAudits = allAudits.filter(audit => audit.agentName === userAgentName);
+      const personalQuality = personalAudits.length > 0 
+        ? Math.round(personalAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / personalAudits.length)
+        : 0;
+      
+      primaryValue = personalQuality;
+      primaryLabel = 'Tu calidad';
+      secondaryLabel = 'Promedio del equipo';
+      
+      chartLabels = ['Tu Calidad', 'Promedio del Equipo', 'Meta (100%)'];
+      chartData = [personalQuality, teamQuality, Math.max(0, 100 - Math.max(personalQuality, teamQuality))];
+      chartColors = ['#38CEA6', '#0ea5e9', '#e5e7eb'];
+      
+      // Build comparison text for regular users
+      var comparisonText = `
+        Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
+        Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
+      `;
+    }
     
     // Check if chart already exists
     let chartContainer = document.getElementById('qualityComparisonChart');
@@ -1469,8 +1736,7 @@ const App = {
           <canvas id="qualityComparisonCanvas"></canvas>
         </div>
         <p style="text-align: center; margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);">
-          Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
-          Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
+          ${comparisonText}
         </p>
       `;
       
@@ -1483,10 +1749,7 @@ const App = {
       // Update existing chart text
       const textElement = chartContainer.querySelector('p');
       if (textElement) {
-        textElement.innerHTML = `
-          Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
-          Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
-        `;
+        textElement.innerHTML = comparisonText;
       }
     }
     
@@ -1503,10 +1766,10 @@ const App = {
       this.charts.qualityComparison = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Tu Calidad', 'Promedio del Equipo', 'Meta (100%)'],
+          labels: chartLabels,
           datasets: [{
-            data: [personalQuality, teamQuality, Math.max(0, 100 - Math.max(personalQuality, teamQuality))],
-            backgroundColor: ['#38CEA6', '#0ea5e9', '#e5e7eb'],
+            data: chartData,
+            backgroundColor: chartColors,
             borderWidth: 2,
             borderColor: '#fff'
           }]
@@ -1702,8 +1965,19 @@ const App = {
   loadTeamsView() {
     const teams = DataManager.getAllTeams();
     const container = document.getElementById('teamsContainer');
+    const isEditor = DataManager.isEditor();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
+    const userTeam = DataManager.getUserTeam();
+    const currentUser = DataManager.getCurrentUser();
+    const isAdmin = DataManager.isAdmin();
     
-    container.innerHTML = Object.values(teams).map(team => `
+    // For supervisors/analistas, only show their team
+    let teamsToShow = Object.values(teams);
+    if (hasSupervisorPerms && !isEditor && userTeam) {
+      teamsToShow = teamsToShow.filter(team => team.id === userTeam);
+    }
+    
+    container.innerHTML = teamsToShow.map(team => `
       <div class="glass" style="padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid ${team.color};">
           <div>
@@ -1714,9 +1988,19 @@ const App = {
               <i class="fas fa-envelope"></i> ${team.email || 'No hay email configurado'}
             </div>
           </div>
-          <button class="btn-accent" onclick="App.showAddMemberModal('${team.id}')" style="background: ${team.color}; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
-            <i class="fas fa-plus"></i> Agregar Integrante
-          </button>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            ${isEditor ? `
+              <button class="btn-accent" onclick="App.showAddSupervisorModal('${team.id}')" style="background: #8b5cf6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-user-shield"></i> Agregar Supervisor
+              </button>
+              <button class="btn-accent" onclick="App.showAddAnalistaModal('${team.id}')" style="background: #06b6d4; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-chart-line"></i> Agregar Analista
+              </button>
+            ` : ''}
+            <button class="btn-accent" onclick="App.showAddMemberModal('${team.id}')" style="background: ${team.color}; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+              <i class="fas fa-plus"></i> Agregar Integrante
+            </button>
+          </div>
         </div>
         
         <div style="display: grid; gap: 0.5rem;">
@@ -1724,10 +2008,16 @@ const App = {
           ${team.members.map(member => `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 0.5rem; border-left: 3px solid ${team.color};">
               <div style="flex: 1;">
-                <div style="font-weight: 600; color: var(--text-primary);">${member.name}</div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-weight: 600; color: var(--text-primary);">${member.name}</span>
+                  ${member.role === 'calidad' ? '<span style="background: #38CEA6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Calidad</span>' : ''}
+                  ${member.role === 'supervisor' ? '<span style="background: #8b5cf6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Supervisor</span>' : ''}
+                  ${member.role === 'analista' ? '<span style="background: #06b6d4; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Analista</span>' : ''}
+                </div>
                 <div style="font-size: 0.85rem; color: var(--text-muted);">
                   <i class="fas fa-envelope"></i> ${member.email}
                   ${member.shift ? `<span style="margin-left: 0.75rem;"><i class="fas fa-clock"></i> ${member.shift}</span>` : ''}
+                  ${member.subTeam ? `<span style="margin-left: 0.75rem;"><i class="fas fa-sitemap"></i> ${member.subTeam}</span>` : ''}
                 </div>
               </div>
               <div style="display: flex; gap: 0.5rem;">
@@ -1743,25 +2033,296 @@ const App = {
         </div>
       </div>
     `).join('');
+    
+    // Add separate Calidad users section at the bottom (only for Admin)
+    if (isAdmin) {
+      const calidadUsers = this.getCalidadUsers();
+      container.innerHTML += `
+        <div class="glass" style="padding: 1.5rem; margin-top: 2rem; border: 2px solid #38CEA6;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid #38CEA6;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 0.25rem 0; color: #38CEA6;">
+                <i class="fas fa-clipboard-check"></i> Usuarios de Calidad
+              </h3>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                <i class="fas fa-info-circle"></i> Usuarios con permisos de auditoría y gestión de métricas
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn-accent" onclick="App.showAddCalidadModal()" style="background: #38CEA6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-plus"></i> Agregar Calidad
+              </button>
+            </div>
+          </div>
+          
+          <div style="display: grid; gap: 0.5rem;">
+            ${calidadUsers.length === 0 ? '<p class="empty">No hay usuarios de Calidad registrados</p>' : ''}
+            ${calidadUsers.map(user => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f0fdf4; border-radius: 0.5rem; border-left: 3px solid #38CEA6;">
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-weight: 600; color: var(--text-primary);">${user.name}</span>
+                    <span style="background: #38CEA6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Calidad</span>
+                  </div>
+                  <div style="font-size: 0.85rem; color: var(--text-muted);">
+                    <i class="fas fa-envelope"></i> ${user.email}
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn-mini danger" onclick="App.removeCalidadUser('${user.email}')" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+  },
+  
+  // Get all Calidad users from storage
+  getCalidadUsers() {
+    const calidadUsersStr = localStorage.getItem('ridery_calidad_users');
+    return calidadUsersStr ? JSON.parse(calidadUsersStr) : [];
+  },
+  
+  // Save Calidad users to storage
+  saveCalidadUsers(users) {
+    localStorage.setItem('ridery_calidad_users', JSON.stringify(users));
+  },
+  
+  // Remove a Calidad user
+  removeCalidadUser(email) {
+    if (confirm(`¿Está seguro que desea eliminar este usuario de Calidad?`)) {
+      const users = this.getCalidadUsers();
+      const updatedUsers = users.filter(u => u.email !== email);
+      this.saveCalidadUsers(updatedUsers);
+      this.loadTeamsView();
+      alert('Usuario de Calidad eliminado correctamente');
+    }
+  },
+
+  showAddSupervisorModal(teamId) {
+    const team = DataManager.getTeamById(teamId);
+    if (!team) return;
+    
+    // Update modal title for supervisor
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-user-shield"></i> Agregar Supervisor';
+    }
+    
+    // Set member type to supervisor
+    document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = 'supervisor';
+    document.getElementById('memberName').value = '';
+    document.getElementById('memberEmail').value = '';
+    document.getElementById('memberModalMode').value = 'add';
+    document.getElementById('memberOriginalEmail').value = '';
+    
+    // Pre-select supervisor role and hide role selector (fixed to supervisor)
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'supervisor';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for supervisors
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for supervisors (supervisors don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
+    
+    const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Supervisor';
+    }
+    
+    document.getElementById('addMemberModal').classList.remove('hidden');
+  },
+
+  showAddAnalistaModal(teamId) {
+    const team = DataManager.getTeamById(teamId);
+    if (!team) return;
+    
+    // Update modal title for analista
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-chart-line"></i> Agregar Analista';
+    }
+    
+    // Set member type to analista
+    document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = 'analista';
+    document.getElementById('memberName').value = '';
+    document.getElementById('memberEmail').value = '';
+    document.getElementById('memberModalMode').value = 'add';
+    document.getElementById('memberOriginalEmail').value = '';
+    
+    // Pre-select analista role and hide role selector (fixed to analista)
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'analista';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for analistas
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for analistas (analistas don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
+    
+    const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Analista';
+    }
+    
+    document.getElementById('addMemberModal').classList.remove('hidden');
+  },
+
+  showAddCalidadModal() {
+    // Show warning confirmation before proceeding
+    const confirmed = confirm('⚠️ ADVERTENCIA\n\n¿Estás seguro de agregar un usuario con rol de Calidad?\n\nEste rol tendrá permisos para:\n• Crear, modificar y eliminar auditorías\n• Gestionar métricas semanales y mensuales\n• Agregar y eliminar integrantes de equipos\n\n¿Desea continuar?');
+    
+    if (!confirmed) return;
+    
+    // Update modal title for calidad
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-clipboard-check"></i> Agregar Usuario de Calidad';
+    }
+    
+    // Set member type to calidad (no team needed)
+    document.getElementById('memberTeamId').value = 'calidad-global';
+    document.getElementById('memberType').value = 'calidad';
+    document.getElementById('memberName').value = '';
+    document.getElementById('memberEmail').value = '';
+    document.getElementById('memberModalMode').value = 'add';
+    document.getElementById('memberOriginalEmail').value = '';
+    
+    // Pre-select calidad role and hide role selector (fixed to calidad)
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'calidad';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for calidad users
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for calidad users (they don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
+    
+    const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Calidad';
+    }
+    
+    document.getElementById('addMemberModal').classList.remove('hidden');
   },
 
   showAddMemberModal(teamId) {
     const team = DataManager.getTeamById(teamId);
     if (!team) return;
     
+    // Update modal title for regular member
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-user-plus"></i> Agregar Integrante';
+    }
+    
     // Show modal
     document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = 'member';
     document.getElementById('memberName').value = '';
     document.getElementById('memberEmail').value = '';
     document.getElementById('memberModalMode').value = 'add';
     document.getElementById('memberOriginalEmail').value = '';
+    
+    // Reset role to user and show role selector
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'viewer';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'block';
+    }
+    
+    // Show sub-team section for regular members
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'block';
+    }
+    
+    // Clear sub-team
+    const subTeamInput = document.getElementById('memberSubTeam');
+    if (subTeamInput) {
+      subTeamInput.value = '';
+    }
+    
+    // Show shift section for regular members
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'block';
+    }
+    
+    // Restore required attribute for shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = true;
+      radio.checked = false;
+    });
+    
     const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
     if (submitBtn) {
       submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Integrante';
     }
-    
-    // Uncheck all radio buttons
-    document.querySelectorAll('input[name="memberShift"]').forEach(radio => radio.checked = false);
     
     document.getElementById('addMemberModal').classList.remove('hidden');
   },
@@ -1773,11 +2334,30 @@ const App = {
     const member = team.members.find(m => m.email === memberEmail);
     if (!member) return;
 
+    // Update modal title
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-user-edit"></i> Editar Integrante';
+    }
+
     document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = member.role || 'member';
     document.getElementById('memberName').value = member.name || '';
     document.getElementById('memberEmail').value = member.email || '';
     document.getElementById('memberModalMode').value = 'edit';
     document.getElementById('memberOriginalEmail').value = member.email;
+
+    // Set role
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = member.role || 'viewer';
+    }
+    
+    // Set sub-team
+    const subTeamInput = document.getElementById('memberSubTeam');
+    if (subTeamInput) {
+      subTeamInput.value = member.subTeam || '';
+    }
 
     document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
       radio.checked = radio.value === member.shift;
@@ -1804,31 +2384,78 @@ const App = {
     const shift = document.querySelector('input[name="memberShift"]:checked')?.value;
     const mode = document.getElementById('memberModalMode').value || 'add';
     const originalEmail = document.getElementById('memberOriginalEmail').value;
+    const memberType = document.getElementById('memberType')?.value || 'member';
+    const role = document.getElementById('memberRole')?.value || 'viewer';
+    const subTeam = document.getElementById('memberSubTeam')?.value?.trim() || null;
     
-    if (!shift) {
+    // Get current user for activity logging
+    const currentUser = DataManager.getCurrentUser();
+    const addedBy = currentUser?.email;
+    
+    // Supervisors, Analistas and Calidad don't require shift selection
+    const isSupervisorType = memberType === 'supervisor' || role === 'supervisor';
+    const isAnalistaType = memberType === 'analista' || role === 'analista';
+    const isCalidadType = memberType === 'calidad' || role === 'calidad';
+    const isSpecialRole = isSupervisorType || isAnalistaType || isCalidadType;
+    
+    if (!isSpecialRole && !shift) {
       alert('Por favor seleccione un turno');
       return;
     }
     
+    // Handle Calidad users separately (they don't belong to a team)
+    if (isCalidadType && teamId === 'calidad-global') {
+      const calidadUsers = this.getCalidadUsers();
+      // Check if email already exists
+      if (calidadUsers.some(u => u.email === email)) {
+        alert('Ya existe un usuario de Calidad con ese email');
+        return;
+      }
+      calidadUsers.push({ name: name, email: email, role: 'calidad' });
+      this.saveCalidadUsers(calidadUsers);
+      this.closeAddMemberModal();
+      this.loadTeamsView();
+      alert('Usuario de Calidad agregado exitosamente');
+      return;
+    }
+    
+    // Build member data object
+    let finalRole = role;
+    if (isSupervisorType) finalRole = 'supervisor';
+    if (isAnalistaType) finalRole = 'analista';
+    if (isCalidadType) finalRole = 'calidad';
+    
+    const memberData = {
+      name: name,
+      email: email,
+      role: finalRole
+    };
+    
+    // Only add shift and subTeam for regular users (not supervisors/analistas/calidad)
+    if (!isSpecialRole) {
+      memberData.shift = shift;
+      memberData.subTeam = subTeam;
+    }
+    
     let success = false;
     if (mode === 'edit') {
-      success = DataManager.updateTeamMember(teamId, originalEmail, {
-        name: name,
-        email: email,
-        shift: shift
-      });
+      success = DataManager.updateTeamMember(teamId, originalEmail, memberData);
     } else {
-      success = DataManager.addTeamMemberWithShift(teamId, {
-        name: name,
-        email: email,
-        shift: shift
-      });
+      success = DataManager.addTeamMember(teamId, memberData, addedBy);
     }
     
     if (success) {
       this.closeAddMemberModal();
       this.loadTeamsView();
-      alert(mode === 'edit' ? 'Integrante actualizado correctamente' : `Integrante agregado exitosamente al turno ${shift}`);
+      if (isSupervisorType) {
+        alert(mode === 'edit' ? 'Supervisor actualizado correctamente' : 'Supervisor agregado exitosamente');
+      } else if (isAnalistaType) {
+        alert(mode === 'edit' ? 'Analista actualizado correctamente' : 'Analista agregado exitosamente');
+      } else if (isCalidadType) {
+        alert(mode === 'edit' ? 'Usuario de Calidad actualizado correctamente' : 'Usuario de Calidad agregado exitosamente');
+      } else {
+        alert(mode === 'edit' ? 'Integrante actualizado correctamente' : `Integrante agregado exitosamente al turno ${shift}`);
+      }
     } else {
       alert('Error al guardar integrante');
     }
@@ -1836,7 +2463,11 @@ const App = {
 
   removeMember(teamId, memberEmail) {
     if (confirm(`¿Está seguro que desea eliminar este integrante del equipo?`)) {
-      const success = DataManager.removeTeamMember(teamId, memberEmail);
+      // Get current user for activity logging
+      const currentUser = DataManager.getCurrentUser();
+      const removedBy = currentUser?.email;
+      
+      const success = DataManager.removeTeamMember(teamId, memberEmail, removedBy);
       if (success) {
         this.loadTeamsView();
       } else {
@@ -1858,16 +2489,18 @@ const App = {
       cb.checked = false;
     });
     
-    // Populate agent dropdown
+    // Populate agent dropdown (exclude supervisors, analistas, and calidad - they are not auditable)
     const agentSelect = document.getElementById('agentSelect');
     agentSelect.innerHTML = '<option value="">Seleccionar agente...</option>';
     
     const teams = DataManager.getAllTeams();
     Object.values(teams).forEach(team => {
-        if (team.members.length > 0) {
+        // Filter out supervisors, analistas, and calidad from the list
+        const auditableMembers = team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad' && m.role !== 'calidad');
+        if (auditableMembers.length > 0) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = team.name;
-        team.members.forEach(member => {
+        auditableMembers.forEach(member => {
           const option = document.createElement('option');
             option.value = JSON.stringify({ name: member.name, teamId: team.id, email: member.email });
           option.textContent = member.name;
@@ -2130,7 +2763,6 @@ const App = {
     const teamName = team ? team.name : 'N/A';
     const currentUser = DataManager.getCurrentUser();
     const isEditor = DataManager.isEditor();
-    const existingComment = DataManager.getAuditComment(auditId);
 
     // Mark view for activity and table eye status
     if (currentUser?.email) {
@@ -2317,46 +2949,74 @@ const App = {
           </div>
         </div>
 
-        <!-- Comentarios de calidad / agente -->
+        <!-- Conversación de comentarios sobre la auditoría -->
         <div style="background: #f8fafc; padding: 1.25rem; border-radius: 0.85rem; border: 1px solid #e2e8f0; display: grid; gap: 0.75rem;">
           <div style="display: flex; align-items: center; gap: 0.6rem; color: #0f172a; font-weight: 800;">
             <span style="display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 999px; background: #dbeafe; color: #1d4ed8;">💬</span>
             <div>
-              <div style="font-size: 1rem;">Comentarios sobre la auditoría</div>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Comparte feedback y revísalo aquí</div>
+              <div style="font-size: 1rem;">Conversación sobre la auditoría</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Intercambia feedback entre editor y agente</div>
             </div>
           </div>
-          ${existingComment ? `
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
-              <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.4rem; color: #0f172a; font-weight: 700;">
-                  <i class="fas fa-user"></i>
-                  <span>${existingComment.agentEmail}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span style="color: var(--text-muted); font-size: 0.8rem;">${new Date(existingComment.timestamp).toLocaleString()}</span>
-                  ${isEditor ? `<button class="btn-mini" style="background:#fee2e2; color:#b91c1c; border:none;" onclick="App.deleteAuditComment('${auditId}')"><i class="fas fa-trash"></i></button>` : ''}
-                </div>
-              </div>
-              <div style="margin-top: 0.5rem; color: var(--text-primary); line-height: 1.5;">${existingComment.comment}</div>
-            </div>
-          ` : '<div style="color: var(--text-muted);">Aún no hay comentarios del agente.</div>'}
+          <div id="commentsConversation" style="display: grid; gap: 0.5rem; max-height: 300px; overflow-y: auto;">
+            ${this.renderAuditConversation(auditId)}
+          </div>
 
-          ${!isEditor ? `
-            <div style="background: white; border: 1px dashed #cbd5e1; padding: 0.85rem; border-radius: 0.75rem; display: grid; gap: 0.5rem;">
-              <label for="agentComment" style="font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;"><i class="fas fa-pen"></i> Tu comentario</label>
-              <textarea id="agentComment" rows="3" class="input-dark" style="width: 100%; resize: vertical;" placeholder="Comparte tu comentario o aclaración"></textarea>
-              <button class="btn-accent" style="background: linear-gradient(135deg, #0ea5e9, #0369a1); color: white; border: none;" onclick="App.submitAuditComment('${auditId}')">
-                <i class="fas fa-comment-dots"></i> Comentar
-              </button>
-            </div>
-          ` : ''}
+          <!-- Comment input for both editor and agent -->
+          <div style="background: white; border: 1px dashed #cbd5e1; padding: 0.85rem; border-radius: 0.75rem; display: grid; gap: 0.5rem;">
+            <label for="agentComment" style="font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fas fa-pen"></i> ${isEditor ? 'Responder al agente' : 'Tu comentario'}
+            </label>
+            <textarea id="agentComment" rows="3" class="input-dark" style="width: 100%; resize: vertical;" placeholder="${isEditor ? 'Escribe tu respuesta al agente...' : 'Comparte tu comentario o aclaración...'}"></textarea>
+            <button class="btn-accent" style="background: linear-gradient(135deg, ${isEditor ? '#8b5cf6, #6d28d9' : '#0ea5e9, #0369a1'}); color: white; border: none;" onclick="App.submitAuditComment('${auditId}')">
+              <i class="fas fa-comment-dots"></i> ${isEditor ? 'Responder' : 'Comentar'}
+            </button>
+          </div>
         </div>
       </div>
     `;
 
     document.getElementById('auditViewContent').innerHTML = content;
     document.getElementById('auditViewModal').classList.remove('hidden');
+  },
+
+  renderAuditConversation(auditId) {
+    const comments = DataManager.getAuditComments(auditId);
+    const teams = DataManager.getAllTeams();
+    
+    const emailToName = (email) => {
+      for (const team of Object.values(teams)) {
+        const member = team.members?.find(m => m.email === email);
+        if (member) return member.name;
+      }
+      return email;
+    };
+    
+    if (comments.length === 0) {
+      return '<div style="color: var(--text-muted); text-align: center; padding: 1rem;">Aún no hay comentarios. ¡Inicia la conversación!</div>';
+    }
+    
+    return comments.map(msg => {
+      const isEditorMsg = msg.senderRole === 'editor';
+      const bgColor = isEditorMsg ? '#f3e8ff' : '#f0fdf4';
+      const borderColor = isEditorMsg ? '#c4b5fd' : '#bbf7d0';
+      const iconColor = isEditorMsg ? '#8b5cf6' : '#16a34a';
+      const roleLabel = isEditorMsg ? 'Editor' : 'Agente';
+      
+      return `
+        <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 0.75rem; padding: 0.75rem; ${isEditorMsg ? 'margin-left: 1rem;' : 'margin-right: 1rem;'}">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; color: ${iconColor}; font-weight: 700; font-size: 0.85rem;">
+              <i class="fas ${isEditorMsg ? 'fa-user-edit' : 'fa-user'}"></i>
+              <span>${emailToName(msg.senderEmail)}</span>
+              <span style="background: ${iconColor}; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.65rem;">${roleLabel}</span>
+            </div>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">${new Date(msg.timestamp).toLocaleString()}</span>
+          </div>
+          <div style="color: var(--text-primary); line-height: 1.5; font-size: 0.9rem;">${msg.comment}</div>
+        </div>
+      `;
+    }).join('');
   },
 
   submitAuditComment(auditId) {
@@ -2371,7 +3031,10 @@ const App = {
     const user = DataManager.getCurrentUser();
     const audit = DataManager.getAuditById(auditId);
     if (!audit) return;
-    // Solo puede comentar el agente dueño de la auditoría
+    
+    const isEditor = DataManager.isEditor();
+    
+    // Check if user can comment (editor or audit owner)
     const isAuditOwner = () => {
       if (!user) return false;
       if (audit.agentEmail && user.email === audit.agentEmail) return true;
@@ -2384,14 +3047,24 @@ const App = {
       return false;
     };
 
-    if (!isAuditOwner()) {
-      alert('Solo el agente dueño de la auditoría puede comentar.');
+    // Allow editors to reply and audit owners to comment
+    if (!isEditor && !isAuditOwner()) {
+      alert('Solo el agente dueño de la auditoría o el editor pueden comentar.');
       return;
     }
 
-    DataManager.saveAuditComment(auditId, user.email, comment);
-    alert('Comentario enviado');
-    this.viewAudit(auditId);
+    // Save with role information
+    DataManager.saveAuditComment(auditId, user.email, user.role, comment);
+    
+    // Clear the input
+    commentBox.value = '';
+    
+    // Refresh the conversation display
+    const conversationContainer = document.getElementById('commentsConversation');
+    if (conversationContainer) {
+      conversationContainer.innerHTML = this.renderAuditConversation(auditId);
+    }
+    
     this.loadRecentActivity();
   },
 
@@ -2526,28 +3199,41 @@ const App = {
       teamToShow = selectedTeamFilter; // For editors, use selected filter
     }
     
-    // Add all team members based on filter
+    // Add all team members based on filter (exclude supervisors and analistas - they are not auditable)
     if (teamToShow) {
       // Show only specific team
       const team = teams[teamToShow];
       if (team && team.members) {
-        team.members.forEach(member => allAgents.add(member.name));
+        team.members.forEach(member => {
+          // Exclude supervisors and analistas from metrics
+          if (member.role !== 'supervisor' && member.role !== 'analista') {
+            allAgents.add(member.name);
+          }
+        });
       }
     } else if (isEditor && !selectedTeamFilter) {
       // Editor with no filter - show all teams
       Object.values(teams).forEach(team => {
         if (team.members) {
-          team.members.forEach(member => allAgents.add(member.name));
+          team.members.forEach(member => {
+            // Exclude supervisors and analistas from metrics
+            if (member.role !== 'supervisor' && member.role !== 'analista') {
+              allAgents.add(member.name);
+            }
+          });
         }
       });
     }
     
     let agentsList = Array.from(allAgents).sort();
     
-    // Filter agents by team
+    // Filter agents by team and exclude supervisors/analistas
     if (teamToShow) {
       const team = teams[teamToShow];
-      const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+      // Get only non-supervisor/non-analista members
+      const teamMemberNames = team && team.members 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
+        : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }
     
@@ -2952,27 +3638,40 @@ const App = {
       teamToShow = selectedTeamFilter; // For editors, use selected filter
     }
     
-    // Add team members based on filter
+    // Add team members based on filter (exclude supervisors and analistas - they are not auditable)
     if (teamToShow) {
       const team = teams[teamToShow];
       if (team && team.members) {
-        team.members.forEach(member => allAgents.add(member.name));
+        team.members.forEach(member => {
+          // Exclude supervisors and analistas from metrics
+          if (member.role !== 'supervisor' && member.role !== 'analista') {
+            allAgents.add(member.name);
+          }
+        });
       }
     } else if (isEditor && !selectedTeamFilter) {
       // Editor with no filter - show all teams
       Object.values(teams).forEach(team => {
         if (team.members) {
-          team.members.forEach(member => allAgents.add(member.name));
+          team.members.forEach(member => {
+            // Exclude supervisors and analistas from metrics
+            if (member.role !== 'supervisor' && member.role !== 'analista') {
+              allAgents.add(member.name);
+            }
+          });
         }
       });
     }
     
     let agentsList = Array.from(allAgents).sort();
     
-    // Filter by team
+    // Filter by team and exclude supervisors/analistas
     if (teamToShow) {
       const team = teams[teamToShow];
-      const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+      // Get only non-supervisor/non-analista members
+      const teamMemberNames = team && team.members 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
+        : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }
     

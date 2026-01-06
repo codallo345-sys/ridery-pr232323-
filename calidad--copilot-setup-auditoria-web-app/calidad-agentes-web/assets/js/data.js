@@ -38,7 +38,8 @@ const DataManager = {
     WEEKLY_METRICS: 'calidad_weekly_metrics',
     WEEK_CONFIG: 'calidad_week_config',
     AUDIT_VIEWS: 'calidad_audit_views',
-    AUDIT_COMMENTS: 'calidad_audit_comments'
+    AUDIT_COMMENTS: 'calidad_audit_comments',
+    ACTIVITY_LOG: 'calidad_activity_log'
   },
 
   // Remove all persisted app data so every load starts clean
@@ -89,15 +90,22 @@ const DataManager = {
   },
 
   // Test accounts with roles
+  // Roles: 'admin', 'calidad' (formerly editor), 'supervisor', 'analista', 'viewer'
   TEST_ACCOUNTS: {
-    'editor@ridery.com': { email: 'editor@ridery.com', role: 'editor' },
-    'lector@ridery.com': { email: 'lector@ridery.com', role: 'viewer' },
-    // Team-specific accounts
-    'soporte.usuarios@ridery.com': { email: 'soporte.usuarios@ridery.com', role: 'viewer', team: 'soporte-usuarios' },
-    'soporte.conductores@ridery.com': { email: 'soporte.conductores@ridery.com', role: 'viewer', team: 'soporte-conductores' },
-    'soporte.ecr@ridery.com': { email: 'soporte.ecr@ridery.com', role: 'viewer', team: 'soporte-ecr' },
-    'soporte.corporativo@ridery.com': { email: 'soporte.corporativo@ridery.com', role: 'viewer', team: 'soporte-corporativo' },
-    'soporte.delivery@ridery.com': { email: 'soporte.delivery@ridery.com', role: 'viewer', team: 'soporte-delivery' }
+    'admin@ridery.com': { email: 'admin@ridery.com', role: 'admin' },
+    'calidad@ridery.com': { email: 'calidad@ridery.com', role: 'calidad' },
+    'editor@ridery.com': { email: 'editor@ridery.com', role: 'calidad' }, // Legacy support
+    // Supervisor accounts (one per team)
+    'supervisor.usuarios@ridery.com': { email: 'supervisor.usuarios@ridery.com', role: 'supervisor', team: 'soporte-usuarios' },
+    'supervisor.conductores@ridery.com': { email: 'supervisor.conductores@ridery.com', role: 'supervisor', team: 'soporte-conductores' },
+    'supervisor.ecr@ridery.com': { email: 'supervisor.ecr@ridery.com', role: 'supervisor', team: 'soporte-ecr' },
+    'supervisor.corporativo@ridery.com': { email: 'supervisor.corporativo@ridery.com', role: 'supervisor', team: 'soporte-corporativo' },
+    'supervisor.delivery@ridery.com': { email: 'supervisor.delivery@ridery.com', role: 'supervisor', team: 'soporte-delivery' },
+    // Analista account
+    'analista@ridery.com': { email: 'analista@ridery.com', role: 'analista', team: 'soporte-usuarios' },
+    // User test accounts
+    'usuario.prueba@ridery.com': { email: 'usuario.prueba@ridery.com', role: 'viewer', team: 'soporte-usuarios' },
+    'usuario.conductores@ridery.com': { email: 'usuario.conductores@ridery.com', role: 'viewer', team: 'soporte-conductores' }
   },
 
   // Initialize data (non-destructive; only seeds missing stores)
@@ -126,7 +134,23 @@ const DataManager = {
     }
 
     if (!SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG)) {
-      SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify({}));
+      // Initialize with January 2026 default weeks
+      // NOTE: These dates are intentionally hardcoded per business requirements.
+      // The weeks for each month are configured by the editor and shared across all teams.
+      // The editor can modify or delete these weeks as needed through the UI.
+      const defaultConfig = {
+        '2026-0': [
+          { weekNumber: 1, startDate: '2026-01-05', endDate: '2026-01-11', label: 'Semana 1: 05/01 al 11/01' },
+          { weekNumber: 2, startDate: '2026-01-12', endDate: '2026-01-18', label: 'Semana 2: 12/01 al 18/01' },
+          { weekNumber: 3, startDate: '2026-01-19', endDate: '2026-01-25', label: 'Semana 3: 19/01 al 25/01' },
+          { weekNumber: 4, startDate: '2026-01-26', endDate: '2026-02-01', label: 'Semana 4: 26/01 al 01/02' }
+        ]
+      };
+      SafeStorage.setItem(this.STORAGE_KEYS.WEEK_CONFIG, JSON.stringify(defaultConfig));
+    }
+
+    if (!SafeStorage.getItem(this.STORAGE_KEYS.ACTIVITY_LOG)) {
+      SafeStorage.setItem(this.STORAGE_KEYS.ACTIVITY_LOG, JSON.stringify([]));
     }
   },
 
@@ -152,28 +176,68 @@ const DataManager = {
     return agents;
   },
 
-  addTeamMember(teamId, memberData) {
+  addTeamMember(teamId, memberData, addedBy = null) {
     const teams = this.getAllTeams();
     if (teams[teamId]) {
       teams[teamId].members.push({
         ...memberData,
         team: teamId,
-        addedAt: new Date().toISOString()
+        subTeam: memberData.subTeam || null,
+        addedAt: new Date().toISOString(),
+        addedBy: addedBy
       });
       SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+      
+      // Log activity if added by supervisor/analista
+      if (addedBy) {
+        this.logActivity('member_added', {
+          teamId,
+          memberName: memberData.name,
+          memberEmail: memberData.email,
+          addedBy
+        });
+      }
       return true;
     }
     return false;
   },
 
-  removeTeamMember(teamId, memberEmail) {
+  removeTeamMember(teamId, memberEmail, removedBy = null) {
     const teams = this.getAllTeams();
     if (teams[teamId]) {
+      const member = teams[teamId].members.find(m => m.email === memberEmail);
       teams[teamId].members = teams[teamId].members.filter(m => m.email !== memberEmail);
       SafeStorage.setItem(this.STORAGE_KEYS.TEAMS, JSON.stringify(teams));
+      
+      // Log activity if removed by supervisor/analista
+      if (removedBy && member) {
+        this.logActivity('member_removed', {
+          teamId,
+          memberName: member.name,
+          memberEmail: memberEmail,
+          removedBy
+        });
+      }
       return true;
     }
     return false;
+  },
+
+  // Activity Log
+  logActivity(type, data) {
+    const logs = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.ACTIVITY_LOG) || '[]');
+    logs.unshift({
+      type,
+      data,
+      timestamp: new Date().toISOString()
+    });
+    // Keep only last 100 activity logs
+    if (logs.length > 100) logs.length = 100;
+    SafeStorage.setItem(this.STORAGE_KEYS.ACTIVITY_LOG, JSON.stringify(logs));
+  },
+
+  getActivityLog() {
+    return JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.ACTIVITY_LOG) || '[]');
   },
 
   // Authentication
@@ -215,7 +279,41 @@ const DataManager = {
 
   isEditor() {
     const user = this.getCurrentUser();
-    return user && user.role === 'editor';
+    // 'editor' is now 'calidad', but support both for backwards compatibility
+    return user && (user.role === 'editor' || user.role === 'calidad' || user.role === 'admin');
+  },
+
+  isAdmin() {
+    const user = this.getCurrentUser();
+    return user && user.role === 'admin';
+  },
+
+  isCalidad() {
+    const user = this.getCurrentUser();
+    return user && (user.role === 'calidad' || user.role === 'editor');
+  },
+
+  isSupervisor() {
+    const user = this.getCurrentUser();
+    return user && user.role === 'supervisor';
+  },
+
+  isAnalista() {
+    const user = this.getCurrentUser();
+    return user && user.role === 'analista';
+  },
+
+  // Check if user has supervisor-level permissions (supervisor or analista)
+  hasSupervisorPermissions() {
+    const user = this.getCurrentUser();
+    return user && (user.role === 'supervisor' || user.role === 'analista');
+  },
+
+  // Check if user can manage team members (admin, calidad/editor, supervisor, analista)
+  canManageTeamMembers() {
+    const user = this.getCurrentUser();
+    if (!user) return false;
+    return user.role === 'admin' || user.role === 'editor' || user.role === 'calidad' || user.role === 'supervisor' || user.role === 'analista';
   },
 
   getUserTeam() {
@@ -784,20 +882,47 @@ const DataManager = {
     return events;
   },
 
-  // Audit Comments (Agent feedback on their audits)
-  saveAuditComment(auditId, agentEmail, comment) {
+  // Audit Comments (Conversation between agent and editor)
+  // Now supports multiple messages as a conversation
+  saveAuditComment(auditId, senderEmail, senderRole, comment) {
     const comments = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
-    comments[auditId] = {
-      agentEmail,
+    if (!comments[auditId]) {
+      comments[auditId] = [];
+    }
+    comments[auditId].push({
+      senderEmail,
+      senderRole,
       comment,
       timestamp: new Date().toISOString()
-    };
+    });
     SafeStorage.setItem(this.STORAGE_KEYS.AUDIT_COMMENTS, JSON.stringify(comments));
   },
 
-  getAuditComment(auditId) {
+  getAuditComments(auditId) {
     const comments = JSON.parse(SafeStorage.getItem(this.STORAGE_KEYS.AUDIT_COMMENTS) || '{}');
-    return comments[auditId] || null;
+    // Support legacy format (single comment object) and new format (array)
+    const auditComments = comments[auditId];
+    if (!auditComments) return [];
+    if (Array.isArray(auditComments)) return auditComments;
+    // Legacy: convert single comment to array
+    return [{
+      senderEmail: auditComments.agentEmail,
+      senderRole: 'viewer',
+      comment: auditComments.comment,
+      timestamp: auditComments.timestamp
+    }];
+  },
+
+  getAuditComment(auditId) {
+    // Legacy support: returns last comment for backwards compatibility
+    const comments = this.getAuditComments(auditId);
+    if (comments.length === 0) return null;
+    const last = comments[comments.length - 1];
+    return {
+      agentEmail: last.senderEmail,
+      comment: last.comment,
+      timestamp: last.timestamp
+    };
   },
 
   getAllAuditComments() {
