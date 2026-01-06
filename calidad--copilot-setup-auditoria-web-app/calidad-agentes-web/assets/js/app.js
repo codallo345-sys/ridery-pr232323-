@@ -1989,11 +1989,6 @@ const App = {
             </div>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            ${isAdmin ? `
-              <button class="btn-accent" onclick="App.showAddCalidadModal('${team.id}')" style="background: #38CEA6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
-                <i class="fas fa-clipboard-check"></i> Agregar Calidad
-              </button>
-            ` : ''}
             ${isEditor ? `
               <button class="btn-accent" onclick="App.showAddSupervisorModal('${team.id}')" style="background: #8b5cf6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
                 <i class="fas fa-user-shield"></i> Agregar Supervisor
@@ -2038,6 +2033,74 @@ const App = {
         </div>
       </div>
     `).join('');
+    
+    // Add separate Calidad users section at the bottom (only for Admin)
+    if (isAdmin) {
+      const calidadUsers = this.getCalidadUsers();
+      container.innerHTML += `
+        <div class="glass" style="padding: 1.5rem; margin-top: 2rem; border: 2px solid #38CEA6;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid #38CEA6;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 0.25rem 0; color: #38CEA6;">
+                <i class="fas fa-clipboard-check"></i> Usuarios de Calidad
+              </h3>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                <i class="fas fa-info-circle"></i> Usuarios con permisos de auditoría y gestión de métricas
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn-accent" onclick="App.showAddCalidadModal()" style="background: #38CEA6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-plus"></i> Agregar Calidad
+              </button>
+            </div>
+          </div>
+          
+          <div style="display: grid; gap: 0.5rem;">
+            ${calidadUsers.length === 0 ? '<p class="empty">No hay usuarios de Calidad registrados</p>' : ''}
+            ${calidadUsers.map(user => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f0fdf4; border-radius: 0.5rem; border-left: 3px solid #38CEA6;">
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-weight: 600; color: var(--text-primary);">${user.name}</span>
+                    <span style="background: #38CEA6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Calidad</span>
+                  </div>
+                  <div style="font-size: 0.85rem; color: var(--text-muted);">
+                    <i class="fas fa-envelope"></i> ${user.email}
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn-mini danger" onclick="App.removeCalidadUser('${user.email}')" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+  },
+  
+  // Get all Calidad users from storage
+  getCalidadUsers() {
+    const calidadUsersStr = localStorage.getItem('ridery_calidad_users');
+    return calidadUsersStr ? JSON.parse(calidadUsersStr) : [];
+  },
+  
+  // Save Calidad users to storage
+  saveCalidadUsers(users) {
+    localStorage.setItem('ridery_calidad_users', JSON.stringify(users));
+  },
+  
+  // Remove a Calidad user
+  removeCalidadUser(email) {
+    if (confirm(`¿Está seguro que desea eliminar este usuario de Calidad?`)) {
+      const users = this.getCalidadUsers();
+      const updatedUsers = users.filter(u => u.email !== email);
+      this.saveCalidadUsers(updatedUsers);
+      this.loadTeamsView();
+      alert('Usuario de Calidad eliminado correctamente');
+    }
   },
 
   showAddSupervisorModal(teamId) {
@@ -2148,10 +2211,7 @@ const App = {
     document.getElementById('addMemberModal').classList.remove('hidden');
   },
 
-  showAddCalidadModal(teamId) {
-    const team = DataManager.getTeamById(teamId);
-    if (!team) return;
-    
+  showAddCalidadModal() {
     // Show warning confirmation before proceeding
     const confirmed = confirm('⚠️ ADVERTENCIA\n\n¿Estás seguro de agregar un usuario con rol de Calidad?\n\nEste rol tendrá permisos para:\n• Crear, modificar y eliminar auditorías\n• Gestionar métricas semanales y mensuales\n• Agregar y eliminar integrantes de equipos\n\n¿Desea continuar?');
     
@@ -2160,11 +2220,11 @@ const App = {
     // Update modal title for calidad
     const modalTitle = document.getElementById('addMemberModalTitle');
     if (modalTitle) {
-      modalTitle.innerHTML = '<i class="fas fa-clipboard-check"></i> Agregar Calidad';
+      modalTitle.innerHTML = '<i class="fas fa-clipboard-check"></i> Agregar Usuario de Calidad';
     }
     
-    // Set member type to calidad
-    document.getElementById('memberTeamId').value = teamId;
+    // Set member type to calidad (no team needed)
+    document.getElementById('memberTeamId').value = 'calidad-global';
     document.getElementById('memberType').value = 'calidad';
     document.getElementById('memberName').value = '';
     document.getElementById('memberEmail').value = '';
@@ -2340,6 +2400,22 @@ const App = {
     
     if (!isSpecialRole && !shift) {
       alert('Por favor seleccione un turno');
+      return;
+    }
+    
+    // Handle Calidad users separately (they don't belong to a team)
+    if (isCalidadType && teamId === 'calidad-global') {
+      const calidadUsers = this.getCalidadUsers();
+      // Check if email already exists
+      if (calidadUsers.some(u => u.email === email)) {
+        alert('Ya existe un usuario de Calidad con ese email');
+        return;
+      }
+      calidadUsers.push({ name: name, email: email, role: 'calidad' });
+      this.saveCalidadUsers(calidadUsers);
+      this.closeAddMemberModal();
+      this.loadTeamsView();
+      alert('Usuario de Calidad agregado exitosamente');
       return;
     }
     
