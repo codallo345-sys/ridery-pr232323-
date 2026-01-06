@@ -661,14 +661,14 @@ const App = {
     const viewerOnlyEls = document.querySelectorAll('.only-viewer');
     const userTeam = DataManager.getUserTeam();
     
-    if (user.role === 'editor') {
-      roleBadge.textContent = 'Editor';
-      roleBadge.className = 'badge badge-editor';
-      // Show editor-only elements
+    if (user.role === 'admin') {
+      roleBadge.textContent = 'Administrador';
+      roleBadge.className = 'badge badge-admin';
+      roleBadge.style.background = '#eab308';
+      // Show all elements for admin
       document.querySelectorAll('.only-editor').forEach(el => {
         el.style.display = 'block';
       });
-      // Hide viewer-only elements for editors
       viewerOnlyEls.forEach(el => {
         el.style.display = 'none';
       });
@@ -676,7 +676,26 @@ const App = {
       if (filterTeamWeekly) {
         filterTeamWeekly.disabled = false;
       }
-      // Show teams navigation for editor
+      document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
+        el.style.display = 'flex';
+      });
+    } else if (user.role === 'editor' || user.role === 'calidad') {
+      roleBadge.textContent = 'Calidad';
+      roleBadge.className = 'badge badge-calidad';
+      roleBadge.style.background = '#38CEA6';
+      // Show editor-only elements
+      document.querySelectorAll('.only-editor').forEach(el => {
+        el.style.display = 'block';
+      });
+      // Hide viewer-only elements for calidad
+      viewerOnlyEls.forEach(el => {
+        el.style.display = 'none';
+      });
+      const filterTeamWeekly = document.getElementById('filterTeamWeekly');
+      if (filterTeamWeekly) {
+        filterTeamWeekly.disabled = false;
+      }
+      // Show teams navigation for calidad
       document.querySelectorAll('.nav-btn[data-view="teams"]').forEach(el => {
         el.style.display = 'flex';
       });
@@ -1316,7 +1335,7 @@ const App = {
       teamsToShow.forEach(([teamId, team]) => {
         // Filter out supervisors and analistas - they are not auditable
         const teamMemberNames = team.members 
-          ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+          ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
           : [];
         const teamAudits = currentMonthAudits.filter(audit => teamMemberNames.includes(audit.agentName));
         
@@ -1604,6 +1623,7 @@ const App = {
     const user = DataManager.getCurrentUser();
     const userTeam = DataManager.getUserTeam();
     const isEditor = DataManager.isEditor();
+    const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     
     if (!userTeam || isEditor) {
       // Only for team users, not editors
@@ -1614,30 +1634,91 @@ const App = {
     const team = teams[userTeam];
     const allAudits = DataManager.getAllAudits();
     
-    // Find which agent this user represents
-    let userAgentName = null;
-    if (team && team.members) {
-      const member = team.members.find(m => m.email === user.email);
-      if (member) {
-        userAgentName = member.name;
-      }
-    }
-    
-    if (!userAgentName) return;
-    
-    // Calculate personal quality
-    const personalAudits = allAudits.filter(audit => audit.agentName === userAgentName);
-    const personalQuality = personalAudits.length > 0 
-      ? Math.round(personalAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / personalAudits.length)
-      : 0;
-    
-    // Calculate team average quality
-    const teamMemberNames = team && team.members ? team.members.map(m => m.name) : [];
+    // Calculate team average quality (exclude supervisors/analistas from member names)
+    const teamMemberNames = team && team.members 
+      ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
+      : [];
     const teamAudits = allAudits.filter(audit => teamMemberNames.includes(audit.agentName));
     
     const teamQuality = teamAudits.length > 0 
       ? Math.round(teamAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / teamAudits.length)
       : 0;
+    
+    // For supervisors/analistas: calculate other teams average
+    // For regular users: calculate personal quality
+    let primaryValue = 0;
+    let primaryLabel = '';
+    let secondaryLabel = '';
+    let chartLabels = [];
+    let chartData = [];
+    let chartColors = [];
+    
+    if (hasSupervisorPerms) {
+      // Supervisor/Analista: Show "Promedio de mi equipo" vs "Promedio de otros equipos"
+      primaryValue = teamQuality;
+      primaryLabel = 'Promedio de mi equipo';
+      secondaryLabel = 'Promedio de otros equipos';
+      
+      // Calculate average of other teams
+      let otherTeamsTotal = 0;
+      let otherTeamsCount = 0;
+      Object.entries(teams).forEach(([teamId, t]) => {
+        if (teamId !== userTeam && t.members) {
+          const otherMemberNames = t.members
+            .filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad')
+            .map(m => m.name);
+          const otherAudits = allAudits.filter(a => otherMemberNames.includes(a.agentName));
+          if (otherAudits.length > 0) {
+            otherTeamsTotal += otherAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0);
+            otherTeamsCount += otherAudits.length;
+          }
+        }
+      });
+      
+      const otherTeamsAvg = otherTeamsCount > 0 ? Math.round(otherTeamsTotal / otherTeamsCount) : 0;
+      
+      chartLabels = ['Mi Equipo', 'Otros Equipos', 'Meta (100%)'];
+      chartData = [teamQuality, otherTeamsAvg, Math.max(0, 100 - Math.max(teamQuality, otherTeamsAvg))];
+      chartColors = ['#38CEA6', '#f59e0b', '#e5e7eb'];
+      
+      // Build comparison text for supervisors
+      var comparisonText = `
+        Promedio de mi equipo: <strong style="color: #38CEA6; font-size: 1.2rem;">${teamQuality}%</strong><br>
+        Promedio de otros equipos: <strong style="color: #f59e0b; font-size: 1.2rem;">${otherTeamsAvg}%</strong>
+      `;
+    } else {
+      // Regular user: Show personal quality vs team average
+      // Find which agent this user represents
+      let userAgentName = null;
+      if (team && team.members) {
+        const member = team.members.find(m => m.email === user.email);
+        if (member) {
+          userAgentName = member.name;
+        }
+      }
+      
+      if (!userAgentName) return;
+      
+      // Calculate personal quality
+      const personalAudits = allAudits.filter(audit => audit.agentName === userAgentName);
+      const personalQuality = personalAudits.length > 0 
+        ? Math.round(personalAudits.reduce((sum, a) => sum + parseFloat(a.score || 0), 0) / personalAudits.length)
+        : 0;
+      
+      primaryValue = personalQuality;
+      primaryLabel = 'Tu calidad';
+      secondaryLabel = 'Promedio del equipo';
+      
+      chartLabels = ['Tu Calidad', 'Promedio del Equipo', 'Meta (100%)'];
+      chartData = [personalQuality, teamQuality, Math.max(0, 100 - Math.max(personalQuality, teamQuality))];
+      chartColors = ['#38CEA6', '#0ea5e9', '#e5e7eb'];
+      
+      // Build comparison text for regular users
+      var comparisonText = `
+        Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
+        Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
+      `;
+    }
     
     // Check if chart already exists
     let chartContainer = document.getElementById('qualityComparisonChart');
@@ -1655,8 +1736,7 @@ const App = {
           <canvas id="qualityComparisonCanvas"></canvas>
         </div>
         <p style="text-align: center; margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);">
-          Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
-          Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
+          ${comparisonText}
         </p>
       `;
       
@@ -1669,10 +1749,7 @@ const App = {
       // Update existing chart text
       const textElement = chartContainer.querySelector('p');
       if (textElement) {
-        textElement.innerHTML = `
-          Tu calidad: <strong style="color: #38CEA6; font-size: 1.2rem;">${personalQuality}%</strong> vs 
-          Promedio del equipo: <strong style="color: #0ea5e9; font-size: 1.2rem;">${teamQuality}%</strong>
-        `;
+        textElement.innerHTML = comparisonText;
       }
     }
     
@@ -1689,10 +1766,10 @@ const App = {
       this.charts.qualityComparison = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Tu Calidad', 'Promedio del Equipo', 'Meta (100%)'],
+          labels: chartLabels,
           datasets: [{
-            data: [personalQuality, teamQuality, Math.max(0, 100 - Math.max(personalQuality, teamQuality))],
-            backgroundColor: ['#38CEA6', '#0ea5e9', '#e5e7eb'],
+            data: chartData,
+            backgroundColor: chartColors,
             borderWidth: 2,
             borderColor: '#fff'
           }]
@@ -1892,6 +1969,7 @@ const App = {
     const hasSupervisorPerms = DataManager.hasSupervisorPermissions();
     const userTeam = DataManager.getUserTeam();
     const currentUser = DataManager.getCurrentUser();
+    const isAdmin = DataManager.isAdmin();
     
     // For supervisors/analistas, only show their team
     let teamsToShow = Object.values(teams);
@@ -1910,10 +1988,18 @@ const App = {
               <i class="fas fa-envelope"></i> ${team.email || 'No hay email configurado'}
             </div>
           </div>
-          <div style="display: flex; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            ${isAdmin ? `
+              <button class="btn-accent" onclick="App.showAddCalidadModal('${team.id}')" style="background: #38CEA6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-clipboard-check"></i> Agregar Calidad
+              </button>
+            ` : ''}
             ${isEditor ? `
               <button class="btn-accent" onclick="App.showAddSupervisorModal('${team.id}')" style="background: #8b5cf6; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
                 <i class="fas fa-user-shield"></i> Agregar Supervisor
+              </button>
+              <button class="btn-accent" onclick="App.showAddAnalistaModal('${team.id}')" style="background: #06b6d4; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
+                <i class="fas fa-chart-line"></i> Agregar Analista
               </button>
             ` : ''}
             <button class="btn-accent" onclick="App.showAddMemberModal('${team.id}')" style="background: ${team.color}; color: white; border: none; cursor: pointer; font-size: 0.85rem; padding: 0.5rem 1rem;">
@@ -1929,6 +2015,7 @@ const App = {
               <div style="flex: 1;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <span style="font-weight: 600; color: var(--text-primary);">${member.name}</span>
+                  ${member.role === 'calidad' ? '<span style="background: #38CEA6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Calidad</span>' : ''}
                   ${member.role === 'supervisor' ? '<span style="background: #8b5cf6; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Supervisor</span>' : ''}
                   ${member.role === 'analista' ? '<span style="background: #06b6d4; color: white; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem;">Analista</span>' : ''}
                 </div>
@@ -2002,6 +2089,119 @@ const App = {
     const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
     if (submitBtn) {
       submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Supervisor';
+    }
+    
+    document.getElementById('addMemberModal').classList.remove('hidden');
+  },
+
+  showAddAnalistaModal(teamId) {
+    const team = DataManager.getTeamById(teamId);
+    if (!team) return;
+    
+    // Update modal title for analista
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-chart-line"></i> Agregar Analista';
+    }
+    
+    // Set member type to analista
+    document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = 'analista';
+    document.getElementById('memberName').value = '';
+    document.getElementById('memberEmail').value = '';
+    document.getElementById('memberModalMode').value = 'add';
+    document.getElementById('memberOriginalEmail').value = '';
+    
+    // Pre-select analista role and hide role selector (fixed to analista)
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'analista';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for analistas
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for analistas (analistas don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
+    
+    const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Analista';
+    }
+    
+    document.getElementById('addMemberModal').classList.remove('hidden');
+  },
+
+  showAddCalidadModal(teamId) {
+    const team = DataManager.getTeamById(teamId);
+    if (!team) return;
+    
+    // Show warning confirmation before proceeding
+    const confirmed = confirm('⚠️ ADVERTENCIA\n\n¿Estás seguro de agregar un usuario con rol de Calidad?\n\nEste rol tendrá permisos para:\n• Crear, modificar y eliminar auditorías\n• Gestionar métricas semanales y mensuales\n• Agregar y eliminar integrantes de equipos\n\n¿Desea continuar?');
+    
+    if (!confirmed) return;
+    
+    // Update modal title for calidad
+    const modalTitle = document.getElementById('addMemberModalTitle');
+    if (modalTitle) {
+      modalTitle.innerHTML = '<i class="fas fa-clipboard-check"></i> Agregar Calidad';
+    }
+    
+    // Set member type to calidad
+    document.getElementById('memberTeamId').value = teamId;
+    document.getElementById('memberType').value = 'calidad';
+    document.getElementById('memberName').value = '';
+    document.getElementById('memberEmail').value = '';
+    document.getElementById('memberModalMode').value = 'add';
+    document.getElementById('memberOriginalEmail').value = '';
+    
+    // Pre-select calidad role and hide role selector (fixed to calidad)
+    const roleSelect = document.getElementById('memberRole');
+    if (roleSelect) {
+      roleSelect.value = 'calidad';
+    }
+    const roleSection = document.getElementById('memberRoleSection');
+    if (roleSection) {
+      roleSection.style.display = 'none';
+    }
+    
+    // Hide sub-team section for calidad users
+    const subTeamSection = document.getElementById('subTeamSection');
+    if (subTeamSection) {
+      subTeamSection.style.display = 'none';
+    }
+    
+    // Hide shift section for calidad users (they don't need shifts)
+    const shiftSection = document.getElementById('shiftSection');
+    if (shiftSection) {
+      shiftSection.style.display = 'none';
+    }
+    
+    // Remove required attribute from shift radios
+    document.querySelectorAll('input[name="memberShift"]').forEach(radio => {
+      radio.required = false;
+      radio.checked = false;
+    });
+    
+    const submitBtn = document.querySelector('#addMemberForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-plus"></i> Agregar Calidad';
     }
     
     document.getElementById('addMemberModal').classList.remove('hidden');
@@ -2132,23 +2332,31 @@ const App = {
     const currentUser = DataManager.getCurrentUser();
     const addedBy = currentUser?.email;
     
-    // Supervisors don't require shift selection
+    // Supervisors, Analistas and Calidad don't require shift selection
     const isSupervisorType = memberType === 'supervisor' || role === 'supervisor';
+    const isAnalistaType = memberType === 'analista' || role === 'analista';
+    const isCalidadType = memberType === 'calidad' || role === 'calidad';
+    const isSpecialRole = isSupervisorType || isAnalistaType || isCalidadType;
     
-    if (!isSupervisorType && !shift) {
+    if (!isSpecialRole && !shift) {
       alert('Por favor seleccione un turno');
       return;
     }
     
     // Build member data object
+    let finalRole = role;
+    if (isSupervisorType) finalRole = 'supervisor';
+    if (isAnalistaType) finalRole = 'analista';
+    if (isCalidadType) finalRole = 'calidad';
+    
     const memberData = {
       name: name,
       email: email,
-      role: isSupervisorType ? 'supervisor' : role
+      role: finalRole
     };
     
-    // Only add shift and subTeam for non-supervisors
-    if (!isSupervisorType) {
+    // Only add shift and subTeam for regular users (not supervisors/analistas/calidad)
+    if (!isSpecialRole) {
       memberData.shift = shift;
       memberData.subTeam = subTeam;
     }
@@ -2165,6 +2373,10 @@ const App = {
       this.loadTeamsView();
       if (isSupervisorType) {
         alert(mode === 'edit' ? 'Supervisor actualizado correctamente' : 'Supervisor agregado exitosamente');
+      } else if (isAnalistaType) {
+        alert(mode === 'edit' ? 'Analista actualizado correctamente' : 'Analista agregado exitosamente');
+      } else if (isCalidadType) {
+        alert(mode === 'edit' ? 'Usuario de Calidad actualizado correctamente' : 'Usuario de Calidad agregado exitosamente');
       } else {
         alert(mode === 'edit' ? 'Integrante actualizado correctamente' : `Integrante agregado exitosamente al turno ${shift}`);
       }
@@ -2201,14 +2413,14 @@ const App = {
       cb.checked = false;
     });
     
-    // Populate agent dropdown (exclude supervisors and analistas - they are not auditable)
+    // Populate agent dropdown (exclude supervisors, analistas, and calidad - they are not auditable)
     const agentSelect = document.getElementById('agentSelect');
     agentSelect.innerHTML = '<option value="">Seleccionar agente...</option>';
     
     const teams = DataManager.getAllTeams();
     Object.values(teams).forEach(team => {
-        // Filter out supervisors and analistas from the list
-        const auditableMembers = team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista');
+        // Filter out supervisors, analistas, and calidad from the list
+        const auditableMembers = team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad' && m.role !== 'calidad');
         if (auditableMembers.length > 0) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = team.name;
@@ -2944,7 +3156,7 @@ const App = {
       const team = teams[teamToShow];
       // Get only non-supervisor/non-analista members
       const teamMemberNames = team && team.members 
-        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
         : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }
@@ -3382,7 +3594,7 @@ const App = {
       const team = teams[teamToShow];
       // Get only non-supervisor/non-analista members
       const teamMemberNames = team && team.members 
-        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista').map(m => m.name) 
+        ? team.members.filter(m => m.role !== 'supervisor' && m.role !== 'analista' && m.role !== 'calidad').map(m => m.name) 
         : [];
       agentsList = agentsList.filter(agent => teamMemberNames.includes(agent));
     }

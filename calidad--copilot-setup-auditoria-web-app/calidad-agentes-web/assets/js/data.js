@@ -90,9 +90,11 @@ const DataManager = {
   },
 
   // Test accounts with roles
-  // Roles: 'editor', 'supervisor', 'analista', 'viewer'
+  // Roles: 'admin', 'calidad' (formerly editor), 'supervisor', 'analista', 'viewer'
   TEST_ACCOUNTS: {
-    'editor@ridery.com': { email: 'editor@ridery.com', role: 'editor' },
+    'admin@ridery.com': { email: 'admin@ridery.com', role: 'admin' },
+    'calidad@ridery.com': { email: 'calidad@ridery.com', role: 'calidad' },
+    'editor@ridery.com': { email: 'editor@ridery.com', role: 'calidad' }, // Legacy support
     // Supervisor accounts (one per team)
     'supervisor.usuarios@ridery.com': { email: 'supervisor.usuarios@ridery.com', role: 'supervisor', team: 'soporte-usuarios' },
     'supervisor.conductores@ridery.com': { email: 'supervisor.conductores@ridery.com', role: 'supervisor', team: 'soporte-conductores' },
@@ -277,7 +279,18 @@ const DataManager = {
 
   isEditor() {
     const user = this.getCurrentUser();
-    return user && user.role === 'editor';
+    // 'editor' is now 'calidad', but support both for backwards compatibility
+    return user && (user.role === 'editor' || user.role === 'calidad' || user.role === 'admin');
+  },
+
+  isAdmin() {
+    const user = this.getCurrentUser();
+    return user && user.role === 'admin';
+  },
+
+  isCalidad() {
+    const user = this.getCurrentUser();
+    return user && (user.role === 'calidad' || user.role === 'editor');
   },
 
   isSupervisor() {
@@ -296,11 +309,11 @@ const DataManager = {
     return user && (user.role === 'supervisor' || user.role === 'analista');
   },
 
-  // Check if user can manage team members (editor, supervisor, analista)
+  // Check if user can manage team members (admin, calidad/editor, supervisor, analista)
   canManageTeamMembers() {
     const user = this.getCurrentUser();
     if (!user) return false;
-    return user.role === 'editor' || user.role === 'supervisor' || user.role === 'analista';
+    return user.role === 'admin' || user.role === 'editor' || user.role === 'calidad' || user.role === 'supervisor' || user.role === 'analista';
   },
 
   getUserTeam() {
