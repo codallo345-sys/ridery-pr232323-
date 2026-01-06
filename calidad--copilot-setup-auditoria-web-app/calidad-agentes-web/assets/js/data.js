@@ -133,6 +133,9 @@ const DataManager = {
 
     if (!SafeStorage.getItem(this.STORAGE_KEYS.WEEK_CONFIG)) {
       // Initialize with January 2026 default weeks
+      // NOTE: These dates are intentionally hardcoded per business requirements.
+      // The weeks for each month are configured by the editor and shared across all teams.
+      // The editor can modify or delete these weeks as needed through the UI.
       const defaultConfig = {
         '2026-0': [
           { weekNumber: 1, startDate: '2026-01-05', endDate: '2026-01-11', label: 'Semana 1: 05/01 al 11/01' },
