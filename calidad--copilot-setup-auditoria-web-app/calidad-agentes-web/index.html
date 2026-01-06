@@ -67,14 +67,9 @@
           <strong>Cuentas de prueba:</strong><br>
           <span style="display: block; margin-top: 0.5rem;">
             <i class="fas fa-user-edit" style="color: #38CEA6;"></i> Editor: <code>editor@ridery.com</code><br>
-            <i class="fas fa-user-check" style="color: #6b7280;"></i> Lector: <code>lector@ridery.com</code><br>
-            <br>
-            <strong>Equipos:</strong><br>
-            <i class="fas fa-users" style="color: #38CEA6;"></i> <code>soporte.usuarios@ridery.com</code><br>
-            <i class="fas fa-users" style="color: #06b6d4;"></i> <code>soporte.conductores@ridery.com</code><br>
-            <i class="fas fa-users" style="color: #a855f7;"></i> <code>soporte.ecr@ridery.com</code><br>
-            <i class="fas fa-users" style="color: #f59e0b;"></i> <code>soporte.corporativo@ridery.com</code><br>
-            <i class="fas fa-users" style="color: #ef4444;"></i> <code>soporte.delivery@ridery.com</code>
+            <i class="fas fa-user-shield" style="color: #8b5cf6;"></i> Supervisor: <code>supervisor.usuarios@ridery.com</code><br>
+            <i class="fas fa-chart-bar" style="color: #06b6d4;"></i> Analista: <code>analista@ridery.com</code><br>
+            <i class="fas fa-user" style="color: #6b7280;"></i> Usuario: <code>usuario.prueba@ridery.com</code><br>
           </span>
         </p>
       </div>
@@ -257,7 +252,7 @@
                 placeholder="Buscar por agente, ticket o comentarios..."
                 style="flex: 1; min-width: 250px;"
               >
-              <select id="filterTeam" class="input-dark" style="width: auto;">
+              <select id="filterTeam" class="input-dark only-editor" style="width: auto;">
                 <option value="">Todos los equipos</option>
               </select>
               <select id="filterMonth" class="input-dark" style="width: auto;">
@@ -1139,7 +1134,7 @@
   <div id="addMemberModal" class="overlay hidden">
     <div class="overlay-card glass" style="max-width: 500px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0;">
+        <h2 id="addMemberModalTitle" style="font-size: 1.5rem; font-weight: 800; margin: 0;">
           <i class="fas fa-user-plus"></i> Agregar Integrante
         </h2>
         <button id="closeAddMemberBtn" class="btn-mini" style="border: none; background: #f3f4f6;">
@@ -1149,6 +1144,7 @@
 
       <form id="addMemberForm">
         <input type="hidden" id="memberTeamId">
+        <input type="hidden" id="memberType" value="member">
         
         <div style="margin-bottom: 1rem;">
           <label class="label-small" for="memberName">
@@ -1162,6 +1158,24 @@
             <i class="fas fa-envelope"></i> Email *
           </label>
           <input type="email" id="memberEmail" class="input-dark" required placeholder="juan.perez@ridery.com">
+        </div>
+
+        <div id="memberRoleSection" class="only-editor" style="margin-bottom: 1rem;">
+          <label class="label-small" for="memberRole">
+            <i class="fas fa-user-tag"></i> Rol
+          </label>
+          <select id="memberRole" class="input-dark">
+            <option value="viewer">Usuario</option>
+            <option value="supervisor">Supervisor (equipo)</option>
+            <option value="analista">Analista</option>
+          </select>
+        </div>
+
+        <div id="subTeamSection" class="only-editor" style="margin-bottom: 1rem;">
+          <label class="label-small" for="memberSubTeam">
+            <i class="fas fa-sitemap"></i> Sub-equipo (opcional)
+          </label>
+          <input type="text" id="memberSubTeam" class="input-dark" placeholder="Ej: Reembolsos, Pagos, Incidencias...">
         </div>
 
         <div style="margin-bottom: 1.5rem;">
